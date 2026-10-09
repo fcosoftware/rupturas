@@ -1,4 +1,8 @@
+const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
+const EXTERNO = Boolean(API_BASE);
+
 let csrf = "";
+let token = sessionStorage.getItem("sessao") || "";
 
 export class ApiError extends Error {
   constructor(message, status, data) {
@@ -9,9 +13,24 @@ export class ApiError extends Error {
   }
 }
 
+function urlApi(path) {
+  return `${API_BASE}${path}`;
+}
+
+async function lerJson(r) {
+  const texto = await r.text();
+  if (!texto) return {};
+  try {
+    return JSON.parse(texto);
+  } catch {
+    throw new ApiError("O servidor respondeu de forma inesperada. Recarregue a página.", r.status, {});
+  }
+}
+
 async function lerCsrf() {
-  const r = await fetch("/api/csrf", { credentials: "same-origin" });
-  const data = await r.json();
+  if (EXTERNO) return "";
+  const r = await fetch(urlApi("/api/csrf"), { credentials: "same-origin" });
+  const data = await lerJson(r);
   csrf = data.csrf || "";
   return csrf;
 }
@@ -19,17 +38,34 @@ async function lerCsrf() {
 export async function api(path, { method = "GET", body, _retry = false } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (method !== "GET" && method !== "HEAD") {
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!EXTERNO && method !== "GET" && method !== "HEAD") {
     headers["X-CSRF-Token"] = csrf || (await lerCsrf());
   }
-  const r = await fetch(path, {
-    method,
-    headers,
-    credentials: "same-origin",
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const data = await r.json().catch(() => ({}));
+  let r;
+  try {
+    r = await fetch(urlApi(path), {
+      method,
+      headers,
+      credentials: EXTERNO ? "omit" : "same-origin",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(
+      "Não foi possível conectar ao servidor neste computador. Deixe o sistema local aberto e tente de novo.",
+      0,
+      {},
+    );
+  }
+  const data = await lerJson(r);
   if (data.csrf) csrf = data.csrf;
+  if (path === "/api/logout") {
+    token = "";
+    sessionStorage.removeItem("sessao");
+  } else if (r.ok && data.token) {
+    token = data.token;
+    sessionStorage.setItem("sessao", token);
+  }
   if (r.status === 400 && !_retry && String(data.erro || "").includes("Sessão inválida")) {
     csrf = "";
     return api(path, { method, body, _retry: true });

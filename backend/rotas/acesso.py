@@ -6,6 +6,7 @@ from flask import g, jsonify, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend.db import acesso_expirado, permissoes_de, usuario_json
+from backend.sessoes import emitir, revogar
 from backend.seguranca import (
     bloqueado,
     corpo,
@@ -71,10 +72,11 @@ def registrar(app):
         g.db.commit()
         u = g.db.execute("SELECT * FROM usuarios WHERE id=?", (u["id"],)).fetchone()
         g.user = u
-        return jsonify(usuario=me_payload(u), csrf=session["csrf"])
+        return jsonify(usuario=me_payload(u), csrf=session["csrf"], token=emitir(u["id"]))
 
     @app.post("/api/logout")
     def api_sair():
+        revogar(getattr(g, "token", ""))
         session.clear()
         session["csrf"] = secrets.token_hex(16)
         return jsonify(ok=True, csrf=session["csrf"])

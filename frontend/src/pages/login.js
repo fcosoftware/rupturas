@@ -16,6 +16,7 @@ export function renderLogin(app, { ir }) {
           <input type="password" id="senha" autocomplete="current-password" required>
           <button class="btn" type="submit">Entrar</button>
         </form>
+        ${import.meta.env.VITE_API_BASE ? '<p class="dica">O login usa o servidor que está aberto neste computador.</p>' : ""}
         <a class="link-recuperar" href="/recuperar" id="recuperar">Esqueci minha senha</a>
         <p class="foot">© 2026 [Francisco Cunha/FCOSOFTWARE]. Todos os direitos reservados.</p>
       </div>
