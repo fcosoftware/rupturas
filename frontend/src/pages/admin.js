@@ -59,6 +59,7 @@ export async function renderAdmin(app, { ir }) {
           <summary>
             <span class="nome-u">${esc(u.username)}</span>
             ${u.nome ? `<span class="meta">${esc(u.nome)}</span>` : ""}
+            ${u.email ? `<span class="meta">${esc(u.email)}</span>` : '<span class="meta">sem e-mail</span>'}
             ${u.is_admin ? '<span class="selo adm">Administrador</span>' : ""}
             ${selo(u)}
             <span class="meta">Último acesso: ${esc(acesso)}</span>
@@ -67,6 +68,7 @@ export async function renderAdmin(app, { ir }) {
             <form data-acao="editar" data-id="${u.id}">
               <div class="grade">
                 <div><label>Nome</label><input type="text" name="nome" value="${esc(u.nome)}" maxlength="80"></div>
+                <div><label>E-mail de recuperação</label><input type="email" name="email" value="${esc(u.email || "")}" maxlength="120" required autocapitalize="off" spellcheck="false"></div>
                 <div><label>Acesso válido até</label><input type="date" name="validade" value="${esc(u.validade || "")}" ${u.is_admin ? "disabled" : ""}></div>
               </div>
               <label>Permissões</label>
@@ -113,7 +115,7 @@ export async function renderAdmin(app, { ir }) {
     app.querySelector("#conteudo").innerHTML = `
       <div class="painel">
         <h2>Recuperação de senha (${(d.recuperacoes || []).length})</h2>
-        <p class="dica">Copie o link e envie para a pessoa. Ele vale por 2 horas e só pode ser usado uma vez.</p>
+        <p class="dica">O link é enviado por e-mail. Se a pessoa não receber, copie aqui. Ele vale por 2 horas e só pode ser usado uma vez.</p>
         <div style="margin-top:8px;">${recuperacoes}</div>
       </div>
       <div class="painel">
@@ -122,6 +124,7 @@ export async function renderAdmin(app, { ir }) {
           <div class="grade">
             <div><label>Usuário (login)</label><input type="text" name="username" required autocapitalize="off" spellcheck="false"></div>
             <div><label>Nome</label><input type="text" name="nome" maxlength="80"></div>
+            <div><label>E-mail de recuperação</label><input type="email" name="email" required maxlength="120" placeholder="nome@empresa.com" autocapitalize="off" spellcheck="false"></div>
             <div><label>Senha inicial</label><input type="password" name="senha" required minlength="8" autocomplete="new-password"></div>
             <div><label>Acesso válido até</label><input type="date" name="validade" min="${esc(d.hoje)}"><p class="dica">Vazio = sem prazo. O último dia vale por inteiro.</p></div>
           </div>
@@ -206,6 +209,7 @@ export async function renderAdmin(app, { ir }) {
         body: {
           username: campo(form, "username").value.trim(),
           nome: campo(form, "nome").value,
+          email: campo(form, "email").value.trim(),
           senha: campo(form, "senha").value,
           validade: campo(form, "validade").value,
           is_admin: campo(form, "is_admin").checked,
@@ -220,6 +224,7 @@ export async function renderAdmin(app, { ir }) {
         method: "PUT",
         body: {
           nome: campo(form, "nome").value,
+          email: campo(form, "email").value.trim(),
           validade: campo(form, "validade").value,
           is_admin: adminEl.checked,
           ativo: ativoEl.checked,

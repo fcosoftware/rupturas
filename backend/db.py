@@ -47,9 +47,9 @@ def conectar():
 
 def _criar_admin(db, senha, trocar_senha=1):
     db.execute(
-        "INSERT INTO usuarios (username,nome,senha_hash,is_admin,trocar_senha,"
-        "perm_processar,perm_baixar,perm_email,criado_em) VALUES (?,?,?,?,?,?,?,?,?)",
-        ("admin", "Administrador", generate_password_hash(senha), 1, trocar_senha, 1, 1, 1,
+        "INSERT INTO usuarios (username,nome,email,senha_hash,is_admin,trocar_senha,"
+        "perm_processar,perm_baixar,perm_email,criado_em) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("admin", "Administrador", "", generate_password_hash(senha), 1, trocar_senha, 1, 1, 1,
          datetime.now().isoformat(timespec="seconds")),
     )
 
@@ -69,6 +69,7 @@ def iniciar_banco():
             perm_baixar INTEGER NOT NULL DEFAULT 0,
             perm_email INTEGER NOT NULL DEFAULT 0,
             trocar_senha INTEGER NOT NULL DEFAULT 0,
+            email TEXT NOT NULL DEFAULT '',
             criado_em TEXT NOT NULL,
             ultimo_acesso TEXT
         )"""
@@ -90,6 +91,9 @@ def iniciar_banco():
             criado_em TEXT NOT NULL
         )"""
     )
+    colunas = {r[1] for r in db.execute("PRAGMA table_info(usuarios)")}
+    if "email" not in colunas:
+        db.execute("ALTER TABLE usuarios ADD COLUMN email TEXT NOT NULL DEFAULT ''")
     if db.execute("SELECT COUNT(*) FROM emails").fetchone()[0] == 0:
         agora = datetime.now().isoformat(timespec="seconds")
         db.executemany(
@@ -143,6 +147,7 @@ def usuario_json(u):
         "id": u["id"],
         "username": u["username"],
         "nome": u["nome"],
+        "email": u["email"] or "",
         "is_admin": bool(u["is_admin"]),
         "ativo": bool(u["ativo"]),
         "validade": u["validade"],

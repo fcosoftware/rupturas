@@ -9,6 +9,9 @@ Variáveis de ambiente:
     PORT (padrão 5000)
     ADMIN_PASSWORD (senha inicial do admin, só na primeira criação)
     DATA_DIR (pasta do banco e da chave; padrão ./dados)
+    PUBLIC_URL (endereço usado no link do e-mail; padrão: o host do pedido)
+    SMTP_HOST, SMTP_PORT (padrão 587), SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    SMTP_TLS (padrão 1; use 0 para desligar STARTTLS). Porta 465 usa SSL.
 """
 import os
 import sys

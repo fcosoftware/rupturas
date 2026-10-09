@@ -15,9 +15,19 @@ from backend.seguranca import (
     corpo,
     ler_usuario_form,
     validar_data,
+    validar_email,
     validar_senha,
     validar_username,
 )
+
+
+def _email_em_uso(email, exceto_id=None):
+    q = "SELECT 1 FROM usuarios WHERE email=? COLLATE NOCASE"
+    args = [email]
+    if exceto_id is not None:
+        q += " AND id<>?"
+        args.append(exceto_id)
+    return g.db.execute(q, args).fetchone() is not None
 
 
 def registrar(app):
@@ -53,15 +63,17 @@ def registrar(app):
         senha = str(data.get("senha", ""))
         dados = ler_usuario_form(data, incluir_ativo=False)
         validade, erro = validar_data(dados["validade"])
-        erro = erro or validar_username(username) or validar_senha(senha)
+        erro = erro or validar_username(username) or validar_senha(senha) or validar_email(dados["email"])
         if erro:
             return jsonify(erro=erro), 400
+        if _email_em_uso(dados["email"]):
+            return jsonify(erro="Já existe um usuário com esse e-mail."), 409
         try:
             g.db.execute(
-                "INSERT INTO usuarios (username,nome,senha_hash,is_admin,ativo,validade,"
+                "INSERT INTO usuarios (username,nome,email,senha_hash,is_admin,ativo,validade,"
                 "perm_processar,perm_baixar,perm_email,trocar_senha,criado_em) "
-                "VALUES (?,?,?,?,?,?,?,?,?,1,?)",
-                (username, dados["nome"], generate_password_hash(senha), dados["is_admin"], 1,
+                "VALUES (?,?,?,?,?,?,?,?,?,?,1,?)",
+                (username, dados["nome"], dados["email"], generate_password_hash(senha), dados["is_admin"], 1,
                  validade, dados["perm_processar"], dados["perm_baixar"], dados["perm_email"],
                  datetime.now().isoformat(timespec="seconds")),
             )
@@ -76,18 +88,21 @@ def registrar(app):
         u = buscar_usuario(uid)
         dados = ler_usuario_form(corpo())
         validade, erro = validar_data(dados["validade"])
+        erro = erro or validar_email(dados["email"])
         if erro:
             return jsonify(erro=erro), 400
+        if _email_em_uso(dados["email"], exceto_id=u["id"]):
+            return jsonify(erro="Já existe um usuário com esse e-mail."), 409
         if u["id"] == g.user["id"]:
             dados["is_admin"], dados["ativo"] = 1, 1
         elif u["is_admin"] and (not dados["is_admin"] or not dados["ativo"]) \
                 and admins_ativos(g.db, excluindo=u["id"]) == 0:
             return jsonify(erro="É preciso manter pelo menos um administrador ativo."), 400
         g.db.execute(
-            "UPDATE usuarios SET nome=?,is_admin=?,ativo=?,validade=?,perm_processar=?,"
+            "UPDATE usuarios SET nome=?,email=?,is_admin=?,ativo=?,validade=?,perm_processar=?,"
             "perm_baixar=?,perm_email=? WHERE id=?",
-            (dados["nome"], dados["is_admin"], dados["ativo"], validade, dados["perm_processar"],
-             dados["perm_baixar"], dados["perm_email"], uid),
+            (dados["nome"], dados["email"], dados["is_admin"], dados["ativo"], validade,
+             dados["perm_processar"], dados["perm_baixar"], dados["perm_email"], uid),
         )
         g.db.commit()
         return jsonify(ok=True, mensagem=f"Usuário '{u['username']}' atualizado.")

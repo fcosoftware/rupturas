@@ -13,11 +13,11 @@ function renderPedido(app, { ir }) {
       <div class="topo"><h1>Recuperar senha</h1></div>
       <div class="caixa">
         <div id="msgs"></div>
-        <p class="dica">Informe seu usuário. O administrador recebe um link para você criar uma nova senha. O link vale por 2 horas.</p>
+        <p class="dica">Informe o e-mail cadastrado na sua conta. Você recebe um link para criar uma nova senha. O link vale por 2 horas.</p>
         <form>
-          <label for="username">Usuário</label>
-          <input type="text" id="username" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
-          <button class="btn" type="submit">Pedir recuperação</button>
+          <label for="email">E-mail</label>
+          <input type="email" id="email" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email" required autofocus>
+          <button class="btn" type="submit">Enviar link por e-mail</button>
         </form>
         <a class="btn sec" href="/login" id="voltar">Voltar ao login</a>
       </div>
@@ -35,7 +35,7 @@ function renderPedido(app, { ir }) {
     try {
       const data = await api("/api/recuperar", {
         method: "POST",
-        body: { username: app.querySelector("#username").value.trim() },
+        body: { email: app.querySelector("#email").value.trim() },
       });
       msgs.innerHTML = `<p class="msg ok">${esc(data.mensagem)}</p>`;
     } catch (err) {

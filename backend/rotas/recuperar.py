@@ -1,13 +1,15 @@
 """Pedido e conclusão de recuperação de senha."""
+import os
 import secrets
 import time
 from datetime import datetime, timedelta
 
-from flask import g, jsonify, request
+from flask import current_app, g, jsonify, request
 from werkzeug.security import generate_password_hash
 
+from backend.correio import enviar_recuperacao, smtp_configurado
 from backend.db import acesso_expirado
-from backend.seguranca import corpo, validar_senha
+from backend.seguranca import EMAIL_RE, corpo, validar_senha
 
 VALIDADE = timedelta(hours=2)
 MAX_PEDIDOS = 5
@@ -52,13 +54,20 @@ def _bloqueado(ip):
 def registrar(app):
     @app.post("/api/recuperar")
     def api_recuperar():
+        email = str(corpo().get("email", "")).strip().lower()
+        if not email or len(email) > 120 or not EMAIL_RE.fullmatch(email):
+            return jsonify(erro="Informe um e-mail válido."), 400
+        if not smtp_configurado():
+            return jsonify(erro="O envio de e-mail de recuperação não está configurado. Fale com o administrador."), 503
         ip = request.remote_addr or ""
         if _bloqueado(ip):
             return jsonify(erro="Muitos pedidos. Aguarde alguns minutos e tente novamente."), 429
         _pedidos.setdefault(ip, []).append(time.time())
-        username = str(corpo().get("username", "")).strip()
         _limpar_expiradas(g.db)
-        u = g.db.execute("SELECT * FROM usuarios WHERE username=?", (username,)).fetchone()
+        u = g.db.execute(
+            "SELECT * FROM usuarios WHERE email=? COLLATE NOCASE",
+            (email,),
+        ).fetchone()
         if u is not None and u["ativo"] and not acesso_expirado(u):
             token = secrets.token_urlsafe(32)
             expira = (datetime.now() + VALIDADE).isoformat(timespec="seconds")
@@ -68,9 +77,14 @@ def registrar(app):
                 (u["id"], token, expira, datetime.now().isoformat(timespec="seconds")),
             )
             g.db.commit()
+            base = os.environ.get("PUBLIC_URL", "").strip().rstrip("/") or request.host_url.rstrip("/")
+            try:
+                enviar_recuperacao(u["email"], u["nome"] or u["username"], f"{base}/recuperar/{token}")
+            except Exception:
+                current_app.logger.exception("Falha ao enviar e-mail de recuperação")
         return jsonify(
             ok=True,
-            mensagem="Se o usuário existir e estiver ativo, o administrador receberá um link para você definir uma nova senha.",
+            mensagem="Se este e-mail estiver cadastrado em uma conta ativa, você receberá um link para definir uma nova senha. O link vale por 2 horas.",
         )
 
     @app.get("/api/recuperar/<token>")
