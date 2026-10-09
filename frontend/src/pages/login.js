@@ -16,6 +16,7 @@ export function renderLogin(app, { ir }) {
           <input type="password" id="senha" autocomplete="current-password" required>
           <button class="btn" type="submit">Entrar</button>
         </form>
+        <a class="link-recuperar" href="/recuperar" id="recuperar">Esqueci minha senha</a>
         <p class="foot">© 2026 [Francisco Cunha/FCOSOFTWARE]. Todos os direitos reservados.</p>
       </div>
     </div>`;
@@ -39,5 +40,9 @@ export function renderLogin(app, { ir }) {
       msgs.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
       btn.disabled = false;
     }
+  });
+  app.querySelector("#recuperar").addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ir("/recuperar");
   });
 }

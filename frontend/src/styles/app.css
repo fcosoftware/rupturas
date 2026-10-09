@@ -96,3 +96,6 @@ label.suave{font-weight:500;margin-top:14px;}
 .userbar .acoes{display:flex;gap:10px;align-items:center;}
 .userbar a,.userbar button{background:none;border:none;padding:0;font:inherit;color:#771910;font-weight:600;cursor:pointer;text-decoration:underline;}
 .aviso-sem-perm{background:#FFF3E0;border:1px solid #F36A10;border-radius:10px;padding:14px;font-size:14px;}
+.link-recuperar{display:block;text-align:center;margin-top:14px;color:var(--vinho);font-weight:600;font-size:14px;}
+.recuperacao{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed #e4cdb9;}
+.recuperacao .acoes{display:flex;gap:8px;align-items:center;}

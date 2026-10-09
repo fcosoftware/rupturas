@@ -4,6 +4,7 @@ import { renderLogin } from "./pages/login.js";
 import { renderSenha } from "./pages/senha.js";
 import { renderHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
+import { renderRecuperar } from "./pages/recuperar.js";
 
 const app = document.getElementById("app");
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -37,6 +38,11 @@ async function sessao() {
 async function desenhar() {
   const me = await sessao();
   let path = caminhoAtual();
+
+  if (path === "/recuperar" || path.startsWith("/recuperar/")) {
+    renderRecuperar(app, { ir, path });
+    return;
+  }
 
   if (!me) {
     if (path !== "/login") history.replaceState({}, "", urlDe("/login"));

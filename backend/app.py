@@ -12,6 +12,10 @@ ROTAS_SEM_SESSAO = {"/api/csrf", "/api/login"}
 ROTAS_COM_SENHA_PENDENTE = {"/api/csrf", "/api/me", "/api/senha", "/api/logout"}
 
 
+def _rota_de_recuperacao(path):
+    return path == "/api/recuperar" or path.startswith("/api/recuperar/")
+
+
 def create_app():
     iniciar_banco()
     app = Flask(__name__)
@@ -39,12 +43,12 @@ def create_app():
         u = g.db.execute("SELECT * FROM usuarios WHERE id=?", (uid,)).fetchone()
         if u is None or not u["ativo"]:
             session.clear()
-            if request.path.startswith("/api") and request.path not in ROTAS_SEM_SESSAO:
+            if request.path.startswith("/api") and request.path not in ROTAS_SEM_SESSAO and not _rota_de_recuperacao(request.path):
                 return jsonify(erro="Sua sessão foi encerrada. Faça login novamente."), 401
             return None
         if acesso_expirado(u):
             session.clear()
-            if request.path.startswith("/api") and request.path not in ROTAS_SEM_SESSAO:
+            if request.path.startswith("/api") and request.path not in ROTAS_SEM_SESSAO and not _rota_de_recuperacao(request.path):
                 return jsonify(erro="Seu prazo de acesso expirou. Fale com o administrador."), 401
             return None
         g.user = u
@@ -52,6 +56,7 @@ def create_app():
             u["trocar_senha"]
             and request.path.startswith("/api")
             and request.path not in ROTAS_COM_SENHA_PENDENTE
+            and not _rota_de_recuperacao(request.path)
         ):
             return jsonify(erro="Defina uma nova senha para continuar.", codigo="trocar_senha"), 403
         return None

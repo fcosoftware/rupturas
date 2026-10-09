@@ -100,7 +100,22 @@ export async function renderAdmin(app, { ir }) {
         <button class="btn peq perigo" type="button" data-excluir-email="${e.id}" data-email="${esc(e.email)}">Remover</button>
       </div>`).join("") || '<p class="dica">Nenhum e-mail cadastrado.</p>';
 
+    const recuperacoes = (d.recuperacoes || []).map((r) => `
+      <div class="recuperacao">
+        <span><strong>${esc(r.username)}</strong>${r.nome ? ` <span class="meta">${esc(r.nome)}</span>` : ""}
+          <span class="meta"> · até ${esc((r.expira_em || "").replace("T", " "))}</span>
+        </span>
+        <span class="acoes">
+          <button class="btn peq sec" type="button" data-copiar-token="${esc(r.token)}">Copiar link</button>
+        </span>
+      </div>`).join("") || '<p class="dica">Nenhum pedido em aberto.</p>';
+
     app.querySelector("#conteudo").innerHTML = `
+      <div class="painel">
+        <h2>Recuperação de senha (${(d.recuperacoes || []).length})</h2>
+        <p class="dica">Copie o link e envie para a pessoa. Ele vale por 2 horas e só pode ser usado uma vez.</p>
+        <div style="margin-top:8px;">${recuperacoes}</div>
+      </div>
       <div class="painel">
         <h2>Novo usuário</h2>
         <form data-acao="novo" autocomplete="off">
@@ -138,6 +153,17 @@ export async function renderAdmin(app, { ir }) {
 
     app.querySelector("#conteudo").querySelectorAll("form").forEach((form) => {
       form.addEventListener("submit", (ev) => enviar(ev, form));
+    });
+    app.querySelectorAll("[data-copiar-token]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const link = `${location.origin}/recuperar/${btn.dataset.copiarToken}`;
+        try {
+          await navigator.clipboard.writeText(link);
+          msg(msgs, "Link copiado.", "ok");
+        } catch {
+          msg(msgs, link, "ok");
+        }
+      });
     });
     app.querySelectorAll("[data-excluir-email]").forEach((btn) => {
       btn.addEventListener("click", async () => {

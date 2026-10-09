@@ -74,6 +74,15 @@ def iniciar_banco():
         )"""
     )
     db.execute(
+        """CREATE TABLE IF NOT EXISTS recuperacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            expira_em TEXT NOT NULL,
+            criado_em TEXT NOT NULL
+        )"""
+    )
+    db.execute(
         """CREATE TABLE IF NOT EXISTS emails (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,

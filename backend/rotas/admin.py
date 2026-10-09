@@ -7,6 +7,7 @@ from flask import abort, g, jsonify
 from werkzeug.security import generate_password_hash
 
 from backend.db import PERMISSOES, usuario_json
+from backend.rotas.recuperar import listar_pendentes
 from backend.seguranca import (
     EMAIL_RE,
     admin_required,
@@ -38,6 +39,7 @@ def registrar(app):
         return jsonify(
             usuarios=[usuario_json(u) for u in usuarios],
             emails=[{"id": e["id"], "email": e["email"], "nome": e["nome"]} for e in emails],
+            recuperacoes=listar_pendentes(g.db),
             hoje=date.today().isoformat(),
             eu_id=g.user["id"],
             permissoes=PERMISSOES,
@@ -101,6 +103,7 @@ def registrar(app):
             "UPDATE usuarios SET senha_hash=?, trocar_senha=? WHERE id=?",
             (generate_password_hash(senha), 0 if u["id"] == g.user["id"] else 1, uid),
         )
+        g.db.execute("DELETE FROM recuperacoes WHERE usuario_id=?", (uid,))
         g.db.commit()
         return jsonify(ok=True, mensagem=f"Senha de '{u['username']}' redefinida.")
 
@@ -112,6 +115,7 @@ def registrar(app):
             return jsonify(erro="Você não pode excluir o próprio usuário."), 400
         if u["is_admin"] and admins_ativos(g.db, excluindo=u["id"]) == 0:
             return jsonify(erro="É preciso manter pelo menos um administrador ativo."), 400
+        g.db.execute("DELETE FROM recuperacoes WHERE usuario_id=?", (uid,))
         g.db.execute("DELETE FROM usuarios WHERE id=?", (uid,))
         g.db.commit()
         return jsonify(ok=True, mensagem=f"Usuário '{u['username']}' excluído.")
