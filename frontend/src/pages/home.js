@@ -9,9 +9,11 @@ export function renderHome(app, { ir, me }) {
       <div class="userbar">
         <span>👤 ${esc(me.nome || me.username)}${esc(validade)}</span>
         <span class="acoes">
+          ${me.estatico ? "" : `
           ${me.is_admin ? '<a href="/admin" id="ir-admin">Administração</a>' : ""}
           <a href="/senha" id="ir-senha">Alterar senha</a>
           <button type="button" id="sair">Sair</button>
+          `}
         </span>
       </div>
       <div class="header">
@@ -71,7 +73,7 @@ export function renderHome(app, { ir, me }) {
     ev.preventDefault();
     ir("/senha");
   });
-  app.querySelector("#sair").addEventListener("click", async () => {
+  app.querySelector("#sair")?.addEventListener("click", async () => {
     await api("/api/logout", { method: "POST" });
     ir("/login");
   });

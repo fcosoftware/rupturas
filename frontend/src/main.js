@@ -1,5 +1,6 @@
 import "./styles/app.css";
 import { api } from "./lib/api.js";
+import { ESTATICO, USUARIO_ESTATICO } from "./lib/estatico.js";
 import { renderLogin } from "./pages/login.js";
 import { renderSenha } from "./pages/senha.js";
 import { renderHome } from "./pages/home.js";
@@ -36,6 +37,11 @@ async function sessao() {
 }
 
 async function desenhar() {
+  if (ESTATICO) {
+    if (caminhoAtual() !== "/") history.replaceState({}, "", urlDe("/"));
+    renderHome(app, { ir, me: USUARIO_ESTATICO });
+    return;
+  }
   const me = await sessao();
   let path = caminhoAtual();
 
