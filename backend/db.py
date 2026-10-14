@@ -2,12 +2,20 @@
 import os
 import secrets
 import sqlite3
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _pasta_do_programa():
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+ROOT = _pasta_do_programa()
 DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "dados"))
 DB_PATH = DATA_DIR / "usuarios.db"
 KEY_PATH = DATA_DIR / "secret.key"

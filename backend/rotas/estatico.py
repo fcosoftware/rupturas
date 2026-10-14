@@ -1,10 +1,17 @@
 """Entrega o frontend já compilado."""
+import sys
 from pathlib import Path
 
 from flask import abort, send_from_directory
 
-RAIZ = Path(__file__).resolve().parents[2]
-FRONTEND_DIST = RAIZ / "frontend" / "dist"
+
+def _frontend_dist():
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "frontend" / "dist"
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+FRONTEND_DIST = _frontend_dist()
 
 
 def registrar(app):
