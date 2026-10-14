@@ -1,4 +1,5 @@
 import { api, esc, formatarData } from "../lib/api.js";
+import { sair } from "../lib/conta.js";
 import { ligarFerramenta } from "../planilha/processar.js";
 
 export function renderHome(app, { ir, me }) {
@@ -9,11 +10,9 @@ export function renderHome(app, { ir, me }) {
       <div class="userbar">
         <span>👤 ${esc(me.nome || me.username)}${esc(validade)}</span>
         <span class="acoes">
-          ${me.estatico ? "" : `
-          ${me.is_admin ? '<a href="/admin" id="ir-admin">Administração</a>' : ""}
+          ${!me.estatico && me.is_admin ? '<a href="/admin" id="ir-admin">Administração</a>' : ""}
           <a href="/senha" id="ir-senha">Alterar senha</a>
           <button type="button" id="sair">Sair</button>
-          `}
         </span>
       </div>
       <div class="header">
@@ -74,7 +73,8 @@ export function renderHome(app, { ir, me }) {
     ir("/senha");
   });
   app.querySelector("#sair")?.addEventListener("click", async () => {
-    await api("/api/logout", { method: "POST" });
+    if (me.estatico) sair();
+    else await api("/api/logout", { method: "POST" });
     ir("/login");
   });
 

@@ -1,10 +1,34 @@
 import { api, esc } from "../lib/api.js";
+import { recriarAdmin } from "../lib/conta.js";
+import { ESTATICO } from "../lib/estatico.js";
 
 export function renderRecuperar(app, { ir, path }) {
   const prefixo = "/recuperar/";
   const token = path.startsWith(prefixo) ? decodeURIComponent(path.slice(prefixo.length)) : "";
-  if (token) renderNovaSenha(app, { ir, token });
+  if (ESTATICO) renderRecriar(app, { ir });
+  else if (token) renderNovaSenha(app, { ir, token });
   else renderPedido(app, { ir });
+}
+
+function renderRecriar(app, { ir }) {
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="topo"><h1>Recuperar senha</h1></div>
+      <div class="caixa">
+        <div id="msgs"></div>
+        <p class="dica">Neste site a conta fica salva neste navegador. Recriar o acesso gera uma nova senha temporária do usuário admin e apaga a senha anterior deste navegador.</p>
+        <button class="btn" id="recriar" type="button">Recriar acesso do admin</button>
+        <a class="btn sec" href="/login" id="voltar">Voltar ao login</a>
+      </div>
+    </div>`;
+  app.querySelector("#voltar").addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ir("/login");
+  });
+  app.querySelector("#recriar").addEventListener("click", async () => {
+    const senha = await recriarAdmin();
+    app.querySelector("#msgs").innerHTML = `<p class="msg ok">Nova senha temporária do admin: <strong>${esc(senha)}</strong></p>`;
+  });
 }
 
 function renderPedido(app, { ir }) {

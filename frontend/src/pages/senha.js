@@ -1,4 +1,6 @@
 import { api, esc } from "../lib/api.js";
+import { sair, trocarSenha } from "../lib/conta.js";
+import { ESTATICO } from "../lib/estatico.js";
 
 export function renderSenha(app, { ir, obrigatoria }) {
   app.innerHTML = `
@@ -28,14 +30,14 @@ export function renderSenha(app, { ir, obrigatoria }) {
     ev.preventDefault();
     msgs.innerHTML = "";
     try {
-      const data = await api("/api/senha", {
-        method: "POST",
-        body: {
-          atual: app.querySelector("#atual").value,
-          nova: app.querySelector("#nova").value,
-          confirma: app.querySelector("#confirma").value,
-        },
-      });
+      const corpo = {
+        atual: app.querySelector("#atual").value,
+        nova: app.querySelector("#nova").value,
+        confirma: app.querySelector("#confirma").value,
+      };
+      const data = ESTATICO
+        ? await trocarSenha(corpo)
+        : await api("/api/senha", { method: "POST", body: corpo });
       msgs.innerHTML = `<p class="msg ok">${esc(data.mensagem)}</p>`;
       ir("/");
     } catch (err) {
@@ -44,7 +46,8 @@ export function renderSenha(app, { ir, obrigatoria }) {
   });
 
   app.querySelector("#sair")?.addEventListener("click", async () => {
-    await api("/api/logout", { method: "POST" });
+    if (ESTATICO) sair();
+    else await api("/api/logout", { method: "POST" });
     ir("/login");
   });
   app.querySelector("#voltar")?.addEventListener("click", (ev) => {
