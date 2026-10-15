@@ -40,10 +40,6 @@ async function sessao() {
 async function desenhar() {
   const me = ESTATICO ? (await preparar(), usuarioAtual()) : await sessao();
   let path = caminhoAtual();
-  if (ESTATICO && path === "/admin") {
-    history.replaceState({}, "", urlDe("/"));
-    path = "/";
-  }
 
   if (path === "/recuperar" || path.startsWith("/recuperar/")) {
     renderRecuperar(app, { ir, path });
