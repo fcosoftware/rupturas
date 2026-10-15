@@ -1,6 +1,7 @@
 import { api, esc } from "../lib/api.js";
 import { entrar, preparar, senhaInicialVisivel } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
+import { htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
 
 export function renderLogin(app, { ir }) {
   app.innerHTML = `<p class="dica">Carregando...</p>`;
@@ -17,7 +18,7 @@ export function renderLogin(app, { ir }) {
       </div>
       <div class="caixa">
         <div id="msgs"></div>
-        ${inicial ? `<p class="dica">Primeiro acesso neste navegador. Usuário <strong>admin</strong>, senha temporária <strong>${esc(inicial)}</strong>.</p>` : ""}
+        ${inicial ? `<p class="dica">Primeiro acesso neste navegador. Usuário <strong>admin</strong>, senha temporária <strong>${esc(inicial)}</strong>.</p>${htmlEnvioSenha("admin")}` : ""}
         <form autocomplete="on">
           <label for="username">Usuário</label>
           <input type="text" id="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
@@ -58,5 +59,8 @@ export function renderLogin(app, { ir }) {
     ev.preventDefault();
     ir("/recuperar");
   });
+  if (inicial) {
+    ligarEnvioSenha(app, () => ({ username: "admin", nome: "Administrador", senha: inicial }));
+  }
   }
 }

@@ -1,6 +1,7 @@
 import { api, esc, formatarData } from "../lib/api.js";
 import { criarUsuario, dadosAdmin, editarUsuario, excluirUsuario, redefinirSenhaUsuario, sair } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
+import { mostrarEnvioSenha } from "../lib/gmail.js";
 
 function msg(el, texto, tipo) {
   el.innerHTML = texto ? `<p class="msg ${tipo}">${esc(texto)}</p>` : "";
@@ -28,6 +29,7 @@ export async function renderAdmin(app, { ir }) {
         </div>
       </div>
       <div id="msgs"></div>
+      <div id="envio-senha" hidden></div>
       <div id="conteudo"><p class="dica">Carregando...</p></div>
     </div>`;
 
@@ -140,7 +142,7 @@ export async function renderAdmin(app, { ir }) {
             <label><input type="checkbox" name="is_admin"> Administrador (acesso total, sem prazo)</label>
           </div>
           <button class="btn" type="submit" style="width:auto;padding:11px 22px;">Criar usuário</button>
-          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha.</p>
+          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha. Depois de criar, envie essa senha ao administrador.</p>
         </form>
       </div>
       <div class="painel" id="emails">
@@ -210,18 +212,27 @@ export async function renderAdmin(app, { ir }) {
     const acao = form.dataset.acao;
     const id = form.dataset.id;
     if (acao === "novo") {
-      return executar(() => api("/api/admin/usuarios", {
-        method: "POST",
-        body: {
-          username: campo(form, "username").value.trim(),
-          nome: campo(form, "nome").value,
-          email: campo(form, "email").value.trim(),
-          senha: campo(form, "senha").value,
-          validade: campo(form, "validade").value,
-          is_admin: campo(form, "is_admin").checked,
-          permissoes: lerChecks(form),
-        },
-      }));
+      const pacote = {
+        username: campo(form, "username").value.trim(),
+        nome: campo(form, "nome").value.trim(),
+        senha: campo(form, "senha").value,
+      };
+      return executar(async () => {
+        const data = await api("/api/admin/usuarios", {
+          method: "POST",
+          body: {
+            username: pacote.username,
+            nome: pacote.nome,
+            email: campo(form, "email").value.trim(),
+            senha: pacote.senha,
+            validade: campo(form, "validade").value,
+            is_admin: campo(form, "is_admin").checked,
+            permissoes: lerChecks(form),
+          },
+        });
+        mostrarEnvioSenha(app.querySelector("#envio-senha"), pacote);
+        return data;
+      });
     }
     if (acao === "editar") {
       const adminEl = campo(form, "is_admin");
@@ -239,10 +250,20 @@ export async function renderAdmin(app, { ir }) {
       }));
     }
     if (acao === "senha") {
-      return executar(() => api(`/api/admin/usuarios/${id}/senha`, {
-        method: "POST",
-        body: { senha: campo(form, "senha").value },
-      }));
+      const alvo = dados.usuarios.find((u) => String(u.id) === String(id));
+      const pacote = {
+        username: alvo?.username || "",
+        nome: alvo?.nome || "",
+        senha: campo(form, "senha").value,
+      };
+      return executar(async () => {
+        const data = await api(`/api/admin/usuarios/${id}/senha`, {
+          method: "POST",
+          body: { senha: pacote.senha },
+        });
+        mostrarEnvioSenha(app.querySelector("#envio-senha"), pacote);
+        return data;
+      });
     }
     if (acao === "excluir") {
       const nome = form.closest(".usuario").querySelector(".nome-u").textContent;
@@ -263,6 +284,7 @@ function renderAdminLocal(app, { ir }) {
         </div>
       </div>
       <div id="msgs"></div>
+      <div id="envio-senha" hidden></div>
       <div id="conteudo"></div>
     </div>`;
   const msgs = app.querySelector("#msgs");
@@ -349,7 +371,7 @@ function renderAdminLocal(app, { ir }) {
             <label><input type="checkbox" name="is_admin"> Administrador (acesso total, sem prazo)</label>
           </div>
           <button class="btn" type="submit" style="width:auto;padding:11px 22px;">Criar usuário</button>
-          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha.</p>
+          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha. Depois de criar, envie essa senha ao administrador.</p>
         </form>
       </div>
       <div class="painel">
@@ -390,14 +412,23 @@ function renderAdminLocal(app, { ir }) {
     const acao = form.dataset.acao;
     const id = form.dataset.id;
     if (acao === "novo") {
-      return executar(() => criarUsuario({
+      const pacote = {
         username: campo(form, "username").value.trim(),
-        nome: campo(form, "nome").value,
+        nome: campo(form, "nome").value.trim(),
         senha: campo(form, "senha").value,
-        validade: campo(form, "validade").value,
-        is_admin: campo(form, "is_admin").checked,
-        permissoes: lerChecks(form),
-      }));
+      };
+      return executar(async () => {
+        const data = await criarUsuario({
+          username: pacote.username,
+          nome: pacote.nome,
+          senha: pacote.senha,
+          validade: campo(form, "validade").value,
+          is_admin: campo(form, "is_admin").checked,
+          permissoes: lerChecks(form),
+        });
+        mostrarEnvioSenha(app.querySelector("#envio-senha"), pacote);
+        return data;
+      });
     }
     if (acao === "editar") {
       return executar(() => editarUsuario(id, {
@@ -409,7 +440,17 @@ function renderAdminLocal(app, { ir }) {
       }));
     }
     if (acao === "senha") {
-      return executar(() => redefinirSenhaUsuario(id, campo(form, "senha").value));
+      const alvo = dados.usuarios.find((u) => String(u.id) === String(id));
+      const pacote = {
+        username: alvo?.username || "",
+        nome: alvo?.nome || "",
+        senha: campo(form, "senha").value,
+      };
+      return executar(async () => {
+        const data = await redefinirSenhaUsuario(id, pacote.senha);
+        mostrarEnvioSenha(app.querySelector("#envio-senha"), pacote);
+        return data;
+      });
     }
     if (acao === "excluir") {
       const nome = form.closest(".usuario").querySelector(".nome-u").textContent;

@@ -1,6 +1,7 @@
 import { api, esc } from "../lib/api.js";
 import { recriarAdmin } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
+import { htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
 
 export function renderRecuperar(app, { ir, path }) {
   const prefixo = "/recuperar/";
@@ -27,7 +28,9 @@ function renderRecriar(app, { ir }) {
   });
   app.querySelector("#recriar").addEventListener("click", async () => {
     const senha = await recriarAdmin();
-    app.querySelector("#msgs").innerHTML = `<p class="msg ok">Nova senha temporária do admin: <strong>${esc(senha)}</strong></p>`;
+    const msgs = app.querySelector("#msgs");
+    msgs.innerHTML = `<p class="msg ok">Nova senha temporária do admin: <strong>${esc(senha)}</strong></p>${htmlEnvioSenha("admin")}`;
+    ligarEnvioSenha(msgs, () => ({ username: "admin", nome: "Administrador", senha }));
   });
 }
 
