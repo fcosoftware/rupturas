@@ -1,7 +1,17 @@
 import { api, esc, formatarData } from "../lib/api.js";
-import { criarUsuario, dadosAdmin, editarUsuario, excluirUsuario, redefinirSenhaUsuario, sair } from "../lib/conta.js";
+import {
+  configurarSync,
+  criarUsuario,
+  dadosAdmin,
+  editarUsuario,
+  excluirUsuario,
+  forcarPublicacao,
+  redefinirSenhaUsuario,
+  sair,
+} from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
 import { mostrarEnvioSenha } from "../lib/gmail.js";
+import { tokenSync } from "../lib/sync.js";
 
 function msg(el, texto, tipo) {
   el.innerHTML = texto ? `<p class="msg ${tipo}">${esc(texto)}</p>` : "";
@@ -357,6 +367,19 @@ function renderAdminLocal(app, { ir }) {
 
     app.querySelector("#conteudo").innerHTML = `
       <div class="painel">
+        <h2>Senha em qualquer computador</h2>
+        <p class="dica">As contas ficam em <code>contas.json</code> no site. Com um token GitHub (Contents: Read and write no repositório rupturas), criar usuário ou trocar senha publica automaticamente para todos os dispositivos.</p>
+        <form data-acao="sync" autocomplete="off">
+          <label>Token GitHub</label>
+          <input type="password" name="token" value="${esc(tokenSync())}" placeholder="github_pat_... ou ghp_..." autocapitalize="off" spellcheck="false" autocomplete="off">
+          <div class="acoes-u" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn peq" type="submit">Salvar token</button>
+            <button class="btn peq sec" type="button" data-publicar>Publicar contas agora</button>
+          </div>
+          <p class="dica">${d.sync_token ? "Token configurado neste navegador." : "Nenhum token neste navegador — o login compartilhado já funciona; publicar mudanças exige o token."}</p>
+        </form>
+      </div>
+      <div class="painel">
         <h2>Novo usuário</h2>
         <form data-acao="novo" autocomplete="off">
           <div class="grade">
@@ -378,6 +401,10 @@ function renderAdminLocal(app, { ir }) {
         <h2>Usuários (${d.usuarios.length})</h2>
         ${usuarios}
       </div>`;
+
+    app.querySelector("[data-publicar]")?.addEventListener("click", () => {
+      executar(() => forcarPublicacao());
+    });
 
     app.querySelector("#conteudo").querySelectorAll("form").forEach((form) => {
       form.addEventListener("submit", (ev) => enviar(ev, form));
@@ -411,6 +438,9 @@ function renderAdminLocal(app, { ir }) {
     ev.preventDefault();
     const acao = form.dataset.acao;
     const id = form.dataset.id;
+    if (acao === "sync") {
+      return executar(() => Promise.resolve(configurarSync(campo(form, "token").value)));
+    }
     if (acao === "novo") {
       const pacote = {
         username: campo(form, "username").value.trim(),

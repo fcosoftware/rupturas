@@ -1,5 +1,6 @@
-/** Contas do site no GitHub Pages. Ficam neste navegador, sem servidor. */
+/** Contas do site no GitHub Pages. Compartilhadas entre computadores via contas.json. */
 import { ESTATICO } from "./estatico.js";
+import { baixarContas, publicarContas, salvarTokenSync, tokenSync } from "./sync.js";
 
 const CONTAS = "ruptura.contas";
 const SESSAO = "ruptura.sessao";
@@ -24,8 +25,17 @@ function ler() {
   }
 }
 
-function salvar(data) {
+function salvarLocal(data) {
   localStorage.setItem(CONTAS, JSON.stringify(data));
+}
+
+async function salvar(data, { publicar = true } = {}) {
+  data.atualizado_em = new Date().toISOString();
+  salvarLocal(data);
+  if (!publicar || !ESTATICO) return { publicado: false };
+  if (!tokenSync()) return { publicado: false };
+  await publicarContas(data);
+  return { publicado: true };
 }
 
 function hex(bytes) {
@@ -141,6 +151,7 @@ async function criarAdmin(senha) {
     id: 1,
     username: "admin",
     nome: "Administrador",
+    email: "fcosoftware35@gmail.com",
     salt,
     hash: await hashSenha(senha, salt),
     is_admin: true,
@@ -148,19 +159,56 @@ async function criarAdmin(senha) {
     trocar_senha: true,
     permissoes: { processar: true, baixar: true, email: true },
   };
-  salvar({ usuarios: [usuario] });
+  const data = { usuarios: [usuario], senha_inicial: senha };
+  salvarLocal(data);
   localStorage.setItem(INICIAL, senha);
+  return data;
+}
+
+function aplicarSenhaInicial(data) {
+  if (data.senha_inicial) localStorage.setItem(INICIAL, data.senha_inicial);
+  else localStorage.removeItem(INICIAL);
 }
 
 export async function preparar() {
   if (!ESTATICO) return;
-  if (!ler().usuarios.length) await criarAdmin(senhaTemporaria());
+  let remoto = null;
+  try {
+    remoto = await baixarContas();
+  } catch {
+    remoto = null;
+  }
+  const local = ler();
+  if (remoto?.usuarios?.length) {
+    const tRemoto = Date.parse(remoto.atualizado_em || 0) || 0;
+    const tLocal = Date.parse(local.atualizado_em || 0) || 0;
+    if (!local.usuarios.length || tRemoto >= tLocal) {
+      salvarLocal(remoto);
+      aplicarSenhaInicial(remoto);
+      return;
+    }
+    try {
+      await publicarContas(local);
+    } catch {
+      /* mantém a cópia local mais nova até conseguir publicar */
+    }
+    return;
+  }
+  if (!local.usuarios.length) {
+    const data = await criarAdmin(senhaTemporaria());
+    try {
+      await publicarContas(data);
+    } catch {
+      /* sem token: fica neste navegador até publicar */
+    }
+  }
 }
 
 export function senhaInicialVisivel() {
-  const admin = ler().usuarios.find((u) => u.username === "admin");
+  const data = ler();
+  const admin = data.usuarios.find((u) => u.username === "admin");
   if (!admin?.trocar_senha) return "";
-  return localStorage.getItem(INICIAL) || "";
+  return data.senha_inicial || localStorage.getItem(INICIAL) || "";
 }
 
 export function usuarioAtual() {
@@ -185,7 +233,12 @@ export async function entrar(username, senha) {
   const data = ler();
   const alvo = data.usuarios.find((item) => item.id === u.id);
   alvo.ultimo_acesso = new Date().toISOString().slice(0, 19);
-  salvar(data);
+  try {
+    await salvar(data);
+  } catch {
+    data.atualizado_em = new Date().toISOString();
+    salvarLocal(data);
+  }
   sessionStorage.setItem(SESSAO, String(u.id));
   return publico(alvo);
 }
@@ -208,9 +261,23 @@ export async function trocarSenha({ atual, nova, confirma }) {
   u.salt = hex(crypto.getRandomValues(new Uint8Array(16)));
   u.hash = await hashSenha(nova, u.salt);
   u.trocar_senha = false;
-  salvar(data);
+  delete data.senha_inicial;
   localStorage.removeItem(INICIAL);
-  return { mensagem: "Senha alterada com sucesso." };
+  try {
+    const pub = await salvar(data);
+    if (pub?.publicado) {
+      return { mensagem: "Senha alterada com sucesso. Ela já vale em qualquer computador." };
+    }
+  } catch (err) {
+    data.atualizado_em = new Date().toISOString();
+    salvarLocal(data);
+    return {
+      mensagem: `Senha alterada neste computador. Não foi possível publicar: ${err.message}`,
+    };
+  }
+  return {
+    mensagem: "Senha alterada neste computador. Em Administração, publique as contas para valer nos outros dispositivos.",
+  };
 }
 
 export async function recriarAdmin() {
@@ -218,7 +285,8 @@ export async function recriarAdmin() {
   localStorage.removeItem(CONTAS);
   localStorage.removeItem(INICIAL);
   const senha = senhaTemporaria();
-  await criarAdmin(senha);
+  const data = await criarAdmin(senha);
+  await salvar(data);
   return senha;
 }
 
@@ -229,7 +297,20 @@ export function dadosAdmin() {
     hoje: hoje(),
     permissoes: PERMISSOES,
     usuarios: ler().usuarios.map(publico),
+    sync_token: tokenSync() ? "configurado" : "",
   };
+}
+
+export function configurarSync(token) {
+  exigirAdmin();
+  salvarTokenSync(token);
+  return { ok: true, mensagem: token.trim() ? "Token salvo neste navegador." : "Token removido." };
+}
+
+export async function forcarPublicacao() {
+  exigirAdmin();
+  await publicarContas(ler());
+  return { ok: true, mensagem: "Contas publicadas. A senha passa a valer nos outros computadores em alguns minutos." };
 }
 
 export async function criarUsuario({ username, nome, senha, validade, is_admin, permissoes }) {
@@ -264,11 +345,11 @@ export async function criarUsuario({ username, nome, senha, validade, is_admin, 
       },
     ultimo_acesso: "",
   });
-  salvar(data);
+  await salvar(data);
   return { ok: true, mensagem: `Usuário '${login}' criado. Ele deverá trocar a senha no primeiro acesso.` };
 }
 
-export function editarUsuario(id, { nome, validade, is_admin, ativo, permissoes }) {
+export async function editarUsuario(id, { nome, validade, is_admin, ativo, permissoes }) {
   const me = exigirAdmin();
   const data = ler();
   const u = data.usuarios.find((item) => item.id === Number(id));
@@ -291,7 +372,7 @@ export function editarUsuario(id, { nome, validade, is_admin, ativo, permissoes 
       baixar: !!permissoes?.baixar,
       email: !!permissoes?.email,
     };
-  salvar(data);
+  await salvar(data);
   return { ok: true, mensagem: `Usuário '${u.username}' atualizado.` };
 }
 
@@ -305,11 +386,11 @@ export async function redefinirSenhaUsuario(id, senha) {
   u.salt = hex(crypto.getRandomValues(new Uint8Array(16)));
   u.hash = await hashSenha(senha, u.salt);
   u.trocar_senha = u.id !== me.id;
-  salvar(data);
+  await salvar(data);
   return { ok: true, mensagem: `Senha de '${u.username}' redefinida.` };
 }
 
-export function excluirUsuario(id) {
+export async function excluirUsuario(id) {
   const me = exigirAdmin();
   const data = ler();
   const u = data.usuarios.find((item) => item.id === Number(id));
@@ -319,6 +400,6 @@ export function excluirUsuario(id) {
     throw new Error("É preciso manter pelo menos um administrador ativo.");
   }
   data.usuarios = data.usuarios.filter((item) => item.id !== u.id);
-  salvar(data);
+  await salvar(data);
   return { ok: true, mensagem: `Usuário '${u.username}' excluído.` };
 }

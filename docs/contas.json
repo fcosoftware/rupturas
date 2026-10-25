@@ -1,0 +1,24 @@
+{
+  "atualizado_em": "2026-10-24T00:00:00.000Z",
+  "usuarios": [
+    {
+      "id": 1,
+      "username": "admin",
+      "nome": "Administrador",
+      "email": "fcosoftware35@gmail.com",
+      "salt": "3f31713cc1ba892aa0ef796f613b22dd",
+      "hash": "ae8b7c22bb2efeb6bd101d827c665b075562d6b138abcd5a3ba9b395b1b7d42f",
+      "is_admin": true,
+      "ativo": true,
+      "trocar_senha": true,
+      "permissoes": {
+        "processar": true,
+        "baixar": true,
+        "email": true
+      },
+      "validade": "",
+      "ultimo_acesso": ""
+    }
+  ],
+  "senha_inicial": "bCxJsdSaVna7"
+}

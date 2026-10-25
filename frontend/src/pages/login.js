@@ -18,7 +18,7 @@ export function renderLogin(app, { ir }) {
       </div>
       <div class="caixa">
         <div id="msgs"></div>
-        ${inicial ? `<p class="dica">Primeiro acesso neste navegador. Usuário <strong>admin</strong>, senha temporária <strong>${esc(inicial)}</strong>.</p>${htmlEnvioSenha("admin")}` : ""}
+        ${inicial ? `<p class="dica">Primeiro acesso. Usuário <strong>admin</strong>, senha temporária <strong>${esc(inicial)}</strong>. Depois de trocar, use a mesma senha em qualquer computador.</p>${htmlEnvioSenha("admin")}` : ""}
         <form autocomplete="on">
           <label for="username">Usuário</label>
           <input type="text" id="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
