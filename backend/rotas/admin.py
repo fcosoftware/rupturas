@@ -3,9 +3,10 @@ import re
 import sqlite3
 from datetime import date, datetime
 
-from flask import abort, g, jsonify
+from flask import abort, current_app, g, jsonify
 from werkzeug.security import generate_password_hash
 
+from backend.correio import enviar_senha_temporaria, smtp_configurado
 from backend.db import EMAIL_ADMIN, PERMISSOES, usuario_json
 from backend.rotas.recuperar import listar_pendentes
 from backend.seguranca import (
@@ -18,6 +19,17 @@ from backend.seguranca import (
     validar_senha,
     validar_username,
 )
+
+
+def _enviar_senha_se_possivel(destino, nome, username, senha):
+    if not destino or not smtp_configurado():
+        return False
+    try:
+        enviar_senha_temporaria(destino, nome, username, senha)
+        return True
+    except Exception:
+        current_app.logger.exception("Falha ao enviar senha temporária por e-mail")
+        return False
 
 
 def _email_em_uso(email, exceto_id=None):
@@ -83,6 +95,7 @@ def registrar(app):
             g.db.commit()
         except sqlite3.IntegrityError:
             return jsonify(erro="Já existe um usuário com esse nome."), 409
+        enviou = _enviar_senha_se_possivel(dados["email"], dados["nome"], username, senha)
         if not any(dados[f"perm_{k}"] for k in PERMISSOES):
             msg = (
                 f"Usuário '{username}' criado sem permissões. "
@@ -91,6 +104,8 @@ def registrar(app):
             )
         else:
             msg = f"Usuário '{username}' criado. Ele deverá trocar a senha no primeiro acesso."
+        if enviou:
+            msg += f" A senha foi enviada para {dados['email']} (não é exibida nesta tela)."
         return jsonify(ok=True, mensagem=msg)
 
     @app.put("/api/admin/usuarios/<int:uid>")
@@ -136,7 +151,12 @@ def registrar(app):
         )
         g.db.execute("DELETE FROM recuperacoes WHERE usuario_id=?", (uid,))
         g.db.commit()
-        return jsonify(ok=True, mensagem=f"Senha de '{u['username']}' redefinida.")
+        destino = EMAIL_ADMIN if u["is_admin"] else (u["email"] or "")
+        enviou = _enviar_senha_se_possivel(destino, u["nome"] or u["username"], u["username"], senha)
+        msg = f"Senha de '{u['username']}' redefinida."
+        if enviou:
+            msg += f" Enviada para {destino} (não é exibida nesta tela)."
+        return jsonify(ok=True, mensagem=msg)
 
     @app.delete("/api/admin/usuarios/<int:uid>")
     @admin_required

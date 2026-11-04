@@ -10,7 +10,7 @@ import {
   sair,
 } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
-import { mostrarEnvioSenha } from "../lib/gmail.js";
+import { EMAIL_ADMIN, mostrarEnvioSenha } from "../lib/gmail.js";
 import { tokenSync } from "../lib/sync.js";
 
 function msg(el, texto, tipo) {
@@ -229,6 +229,7 @@ export async function renderAdmin(app, { ir }) {
         username: campo(form, "username").value.trim(),
         nome: campo(form, "nome").value.trim(),
         senha: campo(form, "senha").value,
+        para: campo(form, "email").value.trim() || EMAIL_ADMIN,
       };
       return executar(async () => {
         const data = await api("/api/admin/usuarios", {
@@ -236,7 +237,7 @@ export async function renderAdmin(app, { ir }) {
           body: {
             username: pacote.username,
             nome: pacote.nome,
-            email: campo(form, "email").value.trim(),
+            email: pacote.para,
             senha: pacote.senha,
             validade: campo(form, "validade").value,
             is_admin: false,
@@ -267,6 +268,7 @@ export async function renderAdmin(app, { ir }) {
         username: alvo?.username || "",
         nome: alvo?.nome || "",
         senha: campo(form, "senha").value,
+        para: alvo?.is_admin ? EMAIL_ADMIN : (alvo?.email || EMAIL_ADMIN),
       };
       return executar(async () => {
         const data = await api(`/api/admin/usuarios/${id}/senha`, {
@@ -451,6 +453,7 @@ function renderAdminLocal(app, { ir }) {
         username: campo(form, "username").value.trim(),
         nome: campo(form, "nome").value.trim(),
         senha: campo(form, "senha").value,
+        para: EMAIL_ADMIN,
       };
       return executar(async () => {
         const data = await criarUsuario({
@@ -479,6 +482,7 @@ function renderAdminLocal(app, { ir }) {
         username: alvo?.username || "",
         nome: alvo?.nome || "",
         senha: campo(form, "senha").value,
+        para: alvo?.is_admin ? EMAIL_ADMIN : (alvo?.email || EMAIL_ADMIN),
       };
       return executar(async () => {
         const data = await redefinirSenhaUsuario(id, pacote.senha);

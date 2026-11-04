@@ -24,6 +24,30 @@ def enviar_recuperacao(destino, nome, link):
         f"{link}\n\n"
         "Se você não pediu isso, ignore este e-mail.\n"
     )
+    _enviar(mensagem)
+
+
+def enviar_senha_temporaria(destino, nome, username, senha):
+    """Envia a senha temporária por e-mail — não deve ser exibida na tela."""
+    if not smtp_configurado():
+        raise RuntimeError("SMTP não configurado")
+    mensagem = EmailMessage()
+    mensagem["Subject"] = f"Senha de acesso — {username}"
+    mensagem["From"] = _remetente()
+    mensagem["To"] = destino
+    tratamento = nome.strip() if nome and nome.strip() else "olá"
+    mensagem.set_content(
+        f"{tratamento},\n\n"
+        "Segue a senha temporária do Processador de Planilha.\n\n"
+        f"Usuário: {username}\n"
+        f"Senha: {senha}\n\n"
+        "No primeiro acesso será obrigatório trocar esta senha.\n"
+        "Não compartilhe este e-mail. Se você não pediu isso, ignore a mensagem.\n"
+    )
+    _enviar(mensagem)
+
+
+def _enviar(mensagem):
     host = os.environ["SMTP_HOST"].strip()
     port = int(os.environ.get("SMTP_PORT", "587"))
     usuario = os.environ.get("SMTP_USER", "").strip()

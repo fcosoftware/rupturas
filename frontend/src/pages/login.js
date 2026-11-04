@@ -1,7 +1,7 @@
 import { api, esc } from "../lib/api.js";
-import { entrar, preparar, senhaInicialVisivel } from "../lib/conta.js";
+import { entrar, preparar, senhaInicialPendente, senhaInicialVisivel } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
-import { htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
+import { EMAIL_ADMIN, htmlEnvioSenha, ligarEnvioSenha, abrirGmailSenha } from "../lib/gmail.js";
 
 export function renderLogin(app, { ir }) {
   app.innerHTML = `<p class="dica">Carregando...</p>`;
@@ -9,7 +9,8 @@ export function renderLogin(app, { ir }) {
 
   async function montar() {
     if (ESTATICO) await preparar();
-    const inicial = ESTATICO ? senhaInicialVisivel() : "";
+    const pendente = ESTATICO && senhaInicialPendente();
+    const inicial = pendente ? senhaInicialVisivel() : "";
     app.innerHTML = `
     <div class="wrap">
       <div class="topo">
@@ -18,7 +19,10 @@ export function renderLogin(app, { ir }) {
       </div>
       <div class="caixa">
         <div id="msgs"></div>
-        ${inicial ? `<p class="dica">Primeiro acesso. Usuário <strong>admin</strong>, senha temporária <strong>${esc(inicial)}</strong>. Depois de trocar, use a mesma senha em qualquer computador.</p>${htmlEnvioSenha("admin")}` : ""}
+        ${pendente ? `
+          <p class="dica">Primeiro acesso do admin. A senha temporária <strong>não é exibida nesta tela</strong> — ela vai para <strong>${esc(EMAIL_ADMIN)}</strong>.</p>
+          ${htmlEnvioSenha("admin", EMAIL_ADMIN)}
+        ` : ""}
         <form autocomplete="on">
           <label for="username">Usuário</label>
           <input type="text" id="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
@@ -59,8 +63,30 @@ export function renderLogin(app, { ir }) {
     ev.preventDefault();
     ir("/recuperar");
   });
-  if (inicial) {
-    ligarEnvioSenha(app, () => ({ username: "admin", nome: "Administrador", senha: inicial }));
+  if (pendente && inicial) {
+    ligarEnvioSenha(app, () => ({
+      para: EMAIL_ADMIN,
+      username: "admin",
+      nome: "Administrador",
+      senha: inicial,
+      assunto: "Senha de primeiro acesso do admin — Processador de Planilha",
+    }));
+    try {
+      abrirGmailSenha({
+        para: EMAIL_ADMIN,
+        username: "admin",
+        nome: "Administrador",
+        senha: inicial,
+        assunto: "Senha de primeiro acesso do admin — Processador de Planilha",
+      });
+      const aviso = app.querySelector(".aviso-envio");
+      if (aviso) {
+        aviso.innerHTML = `<p class="msg ok">Senha enviada para <strong>${esc(EMAIL_ADMIN)}</strong>. Confirme no Gmail. Ela não aparece nesta tela.</p>`;
+      }
+    } catch (err) {
+      const aviso = app.querySelector(".aviso-envio");
+      if (aviso) aviso.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
+    }
   }
   }
 }

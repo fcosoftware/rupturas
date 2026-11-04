@@ -1,4 +1,4 @@
-/** Abre o Gmail com a senha endereçada ao administrador. */
+/** Envia senha por e-mail (Gmail) sem exibir a senha na tela. */
 import { esc } from "./api.js";
 
 /** Recuperação e avisos do admin sempre vão para este e-mail. */
@@ -8,7 +8,8 @@ export function emailAdministrador() {
   return EMAIL_ADMIN;
 }
 
-export function abrirGmailSenha({ username, nome, senha, assunto }) {
+export function abrirGmailSenha({ para, username, nome, senha, assunto }) {
+  const destino = String(para || EMAIL_ADMIN).trim().toLowerCase() || EMAIL_ADMIN;
   const login = String(username || "").trim();
   const segredo = String(senha || "");
   if (!login || !segredo) throw new Error("Não há senha para enviar.");
@@ -23,18 +24,21 @@ export function abrirGmailSenha({ username, nome, senha, assunto }) {
     `Senha: ${segredo}`,
     "",
     "No primeiro acesso será obrigatório trocar esta senha.",
+    "Não compartilhe esta senha. Se você não pediu isso, ignore o e-mail.",
   );
   const titulo = assunto || `Senha de acesso — ${login}`;
-  const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(EMAIL_ADMIN)}&su=${encodeURIComponent(titulo)}&body=${encodeURIComponent(linhas.join("\n"))}`;
+  const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(destino)}&su=${encodeURIComponent(titulo)}&body=${encodeURIComponent(linhas.join("\n"))}`;
   window.open(url, "_blank", "noopener,noreferrer");
+  return destino;
 }
 
-export function htmlEnvioSenha(username) {
+/** Bloco na tela: nunca mostra a senha, só o e-mail de destino. */
+export function htmlEnvioSenha(username, destino = EMAIL_ADMIN) {
   return `
     <div class="envio-senha">
       <div class="aviso-envio"></div>
-      <p class="dica">Enviar a senha de <strong>${esc(username)}</strong> para <strong>${esc(EMAIL_ADMIN)}</strong>. O Gmail abre preenchido; confirme o envio lá.</p>
-      <button class="btn sec" type="button" data-enviar-senha>Enviar senha para ${esc(EMAIL_ADMIN)}</button>
+      <p class="dica">A senha de <strong>${esc(username)}</strong> não aparece nesta tela. Ela é enviada para <strong>${esc(destino)}</strong>.</p>
+      <button class="btn sec" type="button" data-enviar-senha>Enviar senha para ${esc(destino)}</button>
     </div>`;
 }
 
@@ -45,21 +49,42 @@ export function ligarEnvioSenha(raiz, obterDados) {
     const aviso = raiz.querySelector(".aviso-envio");
     try {
       const dados = obterDados();
-      abrirGmailSenha({
+      const destino = abrirGmailSenha({
+        para: dados.para || EMAIL_ADMIN,
         username: dados.username,
         nome: dados.nome,
         senha: dados.senha,
         assunto: dados.assunto,
       });
-      if (aviso) aviso.innerHTML = `<p class="msg ok">Gmail aberto para ${esc(EMAIL_ADMIN)}. Confirme o envio.</p>`;
+      if (aviso) {
+        aviso.innerHTML = `<p class="msg ok">Gmail aberto para <strong>${esc(destino)}</strong>. Confirme o envio. A senha não é exibida nesta página.</p>`;
+      }
     } catch (err) {
       if (aviso) aviso.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
     }
   });
 }
 
+/** Mostra o bloco e já abre o Gmail (sem colocar a senha no HTML). */
 export function mostrarEnvioSenha(box, dados) {
+  const destino = dados.para || EMAIL_ADMIN;
   box.hidden = false;
-  box.innerHTML = htmlEnvioSenha(dados.username);
+  box.innerHTML = htmlEnvioSenha(dados.username, destino);
   ligarEnvioSenha(box, () => dados);
+  try {
+    const enviadoPara = abrirGmailSenha({
+      para: destino,
+      username: dados.username,
+      nome: dados.nome,
+      senha: dados.senha,
+      assunto: dados.assunto,
+    });
+    const aviso = box.querySelector(".aviso-envio");
+    if (aviso) {
+      aviso.innerHTML = `<p class="msg ok">Senha enviada para <strong>${esc(enviadoPara)}</strong> (confirme no Gmail). Ela não aparece nesta tela.</p>`;
+    }
+  } catch (err) {
+    const aviso = box.querySelector(".aviso-envio");
+    if (aviso) aviso.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
+  }
 }

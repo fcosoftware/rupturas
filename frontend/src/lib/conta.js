@@ -158,15 +158,19 @@ async function criarAdmin(senha) {
     trocar_senha: true,
     permissoes: { processar: true, baixar: true, email: true },
   };
-  const data = { usuarios: [usuario], senha_inicial: senha };
+  const data = { usuarios: [usuario] };
   salvarLocal(data);
   localStorage.setItem(INICIAL, senha);
   return data;
 }
 
 function aplicarSenhaInicial(data) {
-  if (data.senha_inicial) localStorage.setItem(INICIAL, data.senha_inicial);
-  else localStorage.removeItem(INICIAL);
+  // A senha temporária não fica no arquivo público; só neste navegador, para envio por e-mail.
+  if (data.senha_inicial) {
+    localStorage.setItem(INICIAL, data.senha_inicial);
+    delete data.senha_inicial;
+    salvarLocal(data);
+  }
 }
 
 function adminConfirmadoNoRemoto(local, remoto) {
@@ -212,11 +216,16 @@ export async function preparar() {
   }
 }
 
+export function senhaInicialPendente() {
+  const admin = ler().usuarios.find((u) => u.username === "admin");
+  return !!(admin?.trocar_senha && localStorage.getItem(INICIAL));
+}
+
+/** Só para envio por e-mail — não exibir na interface. */
 export function senhaInicialVisivel() {
-  const data = ler();
-  const admin = data.usuarios.find((u) => u.username === "admin");
+  const admin = ler().usuarios.find((u) => u.username === "admin");
   if (!admin?.trocar_senha) return "";
-  return data.senha_inicial || localStorage.getItem(INICIAL) || "";
+  return localStorage.getItem(INICIAL) || "";
 }
 
 export function usuarioAtual() {
@@ -269,7 +278,6 @@ export async function trocarSenha({ atual, nova, confirma }) {
   u.salt = hex(crypto.getRandomValues(new Uint8Array(16)));
   u.hash = await hashSenha(nova, u.salt);
   u.trocar_senha = false;
-  delete data.senha_inicial;
   localStorage.removeItem(INICIAL);
   try {
     const pub = await salvar(data);
@@ -336,7 +344,7 @@ export async function recuperarSenhaAdmin() {
   admin.hash = await hashSenha(senha, admin.salt);
   admin.trocar_senha = true;
   admin.ativo = true;
-  data.senha_inicial = senha;
+  delete data.senha_inicial;
   data.atualizado_em = new Date().toISOString();
   salvarLocal(data);
   localStorage.setItem(INICIAL, senha);

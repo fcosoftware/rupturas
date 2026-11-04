@@ -1,7 +1,7 @@
 import { api, esc } from "../lib/api.js";
 import { recuperarSenhaAdmin, recriarAdmin } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
-import { EMAIL_ADMIN, htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
+import { EMAIL_ADMIN, htmlEnvioSenha, ligarEnvioSenha, abrirGmailSenha } from "../lib/gmail.js";
 
 export function renderRecuperar(app, { ir, path }) {
   const prefixo = "/recuperar/";
@@ -17,9 +17,8 @@ function renderRecuperarEstatico(app, { ir }) {
       <div class="topo"><h1>Recuperar senha</h1></div>
       <div class="caixa">
         <div id="msgs"></div>
-        <p class="dica">A recuperação da senha do <strong>admin</strong> sempre é enviada para <strong>${esc(EMAIL_ADMIN)}</strong>.</p>
-        <button class="btn" id="recuperar-admin" type="button">Gerar nova senha do admin</button>
-        <p class="dica">Isso cria uma senha temporária e abre o Gmail para ${esc(EMAIL_ADMIN)}. Confirme o envio lá.</p>
+        <p class="dica">A nova senha do <strong>admin</strong> <strong>não aparece nesta tela</strong>. Ela é enviada para <strong>${esc(EMAIL_ADMIN)}</strong>.</p>
+        <button class="btn" id="recuperar-admin" type="button">Enviar nova senha do admin por e-mail</button>
         <a class="btn sec" href="/login" id="voltar">Voltar ao login</a>
       </div>
     </div>`;
@@ -39,15 +38,21 @@ function renderRecuperarEstatico(app, { ir }) {
         senha = await recriarAdmin();
       }
       msgs.innerHTML = `
-        <p class="msg ok">Nova senha temporária do admin gerada.</p>
-        ${htmlEnvioSenha("admin")}`;
-      ligarEnvioSenha(msgs, () => ({
+        <p class="msg ok">Nova senha gerada. Ela não é exibida aqui.</p>
+        ${htmlEnvioSenha("admin", EMAIL_ADMIN)}`;
+      const pacote = {
+        para: EMAIL_ADMIN,
         username: "admin",
         nome: "Administrador",
         senha,
         assunto: "Recuperação de senha do admin — Processador de Planilha",
-      }));
-      msgs.querySelector("[data-enviar-senha]")?.click();
+      };
+      ligarEnvioSenha(msgs, () => pacote);
+      abrirGmailSenha(pacote);
+      const aviso = msgs.querySelector(".aviso-envio");
+      if (aviso) {
+        aviso.innerHTML = `<p class="msg ok">Senha enviada para <strong>${esc(EMAIL_ADMIN)}</strong>. Confirme no Gmail.</p>`;
+      }
     } catch (err) {
       msgs.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
       btn.disabled = false;
@@ -61,7 +66,7 @@ function renderPedido(app, { ir }) {
       <div class="topo"><h1>Recuperar senha</h1></div>
       <div class="caixa">
         <div id="msgs"></div>
-        <p class="dica">Informe o e-mail da conta. A recuperação do <strong>admin</strong> sempre vai para <strong>${esc(EMAIL_ADMIN)}</strong>. O link vale por 2 horas.</p>
+        <p class="dica">Informe o e-mail da conta. A recuperação do <strong>admin</strong> sempre vai para <strong>${esc(EMAIL_ADMIN)}</strong>. O link vale por 2 horas. A senha nunca é mostrada nesta tela.</p>
         <form>
           <label for="email">E-mail</label>
           <input type="email" id="email" value="${esc(EMAIL_ADMIN)}" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email" required autofocus>

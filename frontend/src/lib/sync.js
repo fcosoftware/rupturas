@@ -33,11 +33,11 @@ export async function publicarContas(data) {
       "Para a senha valer em outros computadores, cole um token GitHub em Administração (permissão Contents: Read and write neste repositório).",
     );
   }
+  // Nunca publica senha em texto claro no repositório.
   const limpo = {
     atualizado_em: data.atualizado_em || new Date().toISOString(),
     usuarios: data.usuarios,
   };
-  if (data.senha_inicial) limpo.senha_inicial = data.senha_inicial;
 
   const meta = await fetch(`https://api.github.com/repos/${REPO}/contents/${CAMINHO}`, {
     headers: {
