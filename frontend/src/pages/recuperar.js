@@ -1,24 +1,25 @@
 import { api, esc } from "../lib/api.js";
-import { recriarAdmin } from "../lib/conta.js";
+import { recuperarSenhaAdmin, recriarAdmin } from "../lib/conta.js";
 import { ESTATICO } from "../lib/estatico.js";
-import { htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
+import { EMAIL_ADMIN, htmlEnvioSenha, ligarEnvioSenha } from "../lib/gmail.js";
 
 export function renderRecuperar(app, { ir, path }) {
   const prefixo = "/recuperar/";
   const token = path.startsWith(prefixo) ? decodeURIComponent(path.slice(prefixo.length)) : "";
-  if (ESTATICO) renderRecriar(app, { ir });
+  if (ESTATICO) renderRecuperarEstatico(app, { ir });
   else if (token) renderNovaSenha(app, { ir, token });
   else renderPedido(app, { ir });
 }
 
-function renderRecriar(app, { ir }) {
+function renderRecuperarEstatico(app, { ir }) {
   app.innerHTML = `
     <div class="wrap">
       <div class="topo"><h1>Recuperar senha</h1></div>
       <div class="caixa">
         <div id="msgs"></div>
-        <p class="dica">Neste site a conta fica salva neste navegador. Recriar o acesso gera uma nova senha temporária do usuário admin e apaga a senha anterior deste navegador.</p>
-        <button class="btn" id="recriar" type="button">Recriar acesso do admin</button>
+        <p class="dica">A recuperação da senha do <strong>admin</strong> sempre é enviada para <strong>${esc(EMAIL_ADMIN)}</strong>.</p>
+        <button class="btn" id="recuperar-admin" type="button">Gerar nova senha do admin</button>
+        <p class="dica">Isso cria uma senha temporária e abre o Gmail para ${esc(EMAIL_ADMIN)}. Confirme o envio lá.</p>
         <a class="btn sec" href="/login" id="voltar">Voltar ao login</a>
       </div>
     </div>`;
@@ -26,11 +27,31 @@ function renderRecriar(app, { ir }) {
     ev.preventDefault();
     ir("/login");
   });
-  app.querySelector("#recriar").addEventListener("click", async () => {
-    const senha = await recriarAdmin();
+  app.querySelector("#recuperar-admin").addEventListener("click", async () => {
     const msgs = app.querySelector("#msgs");
-    msgs.innerHTML = `<p class="msg ok">Nova senha temporária do admin: <strong>${esc(senha)}</strong></p>${htmlEnvioSenha("admin")}`;
-    ligarEnvioSenha(msgs, () => ({ username: "admin", nome: "Administrador", senha }));
+    const btn = app.querySelector("#recuperar-admin");
+    btn.disabled = true;
+    try {
+      let senha;
+      try {
+        senha = await recuperarSenhaAdmin();
+      } catch {
+        senha = await recriarAdmin();
+      }
+      msgs.innerHTML = `
+        <p class="msg ok">Nova senha temporária do admin gerada.</p>
+        ${htmlEnvioSenha("admin")}`;
+      ligarEnvioSenha(msgs, () => ({
+        username: "admin",
+        nome: "Administrador",
+        senha,
+        assunto: "Recuperação de senha do admin — Processador de Planilha",
+      }));
+      msgs.querySelector("[data-enviar-senha]")?.click();
+    } catch (err) {
+      msgs.innerHTML = `<p class="msg erro">${esc(err.message)}</p>`;
+      btn.disabled = false;
+    }
   });
 }
 
@@ -40,10 +61,10 @@ function renderPedido(app, { ir }) {
       <div class="topo"><h1>Recuperar senha</h1></div>
       <div class="caixa">
         <div id="msgs"></div>
-        <p class="dica">Informe o e-mail cadastrado na sua conta. Você recebe um link para criar uma nova senha. O link vale por 2 horas.</p>
+        <p class="dica">Informe o e-mail da conta. A recuperação do <strong>admin</strong> sempre vai para <strong>${esc(EMAIL_ADMIN)}</strong>. O link vale por 2 horas.</p>
         <form>
           <label for="email">E-mail</label>
-          <input type="email" id="email" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email" required autofocus>
+          <input type="email" id="email" value="${esc(EMAIL_ADMIN)}" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email" required autofocus>
           <button class="btn" type="submit">Enviar link por e-mail</button>
         </form>
         <a class="btn sec" href="/login" id="voltar">Voltar ao login</a>

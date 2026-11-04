@@ -36,7 +36,7 @@ export function renderHome(app, { ir, me }) {
         <button class="principal" id="btnProcessar" disabled>Processar planilha</button>
         ${perms.baixar ? '<button class="baixar" id="btnBaixar">⬇️ Baixar planilha processada</button>' : ""}
         ` : ""}
-        ${!perms.processar && !perms.email ? '<div class="aviso-sem-perm">Seu usuário ainda não tem permissões nesta ferramenta. Fale com o administrador.</div>' : ""}
+        ${!me.is_admin && !perms.processar && !perms.baixar && !perms.email ? '<div class="aviso-sem-perm">Seu usuário ainda não tem permissões. Peça ao administrador para liberar o acesso.</div>' : ""}
         <div class="console" id="console"></div>
         ${perms.email ? `
         <hr class="divisor">

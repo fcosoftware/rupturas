@@ -25,6 +25,7 @@ PERMISSOES = {
     "baixar": "Baixar planilha processada",
     "email": "Enviar por e-mail",
 }
+EMAIL_ADMIN = "fcosoftware35@gmail.com"
 EMAILS_INICIAIS = [
     "alexandre.gorges@giassi.com.br",
     "lidio.silva@giassi.com.br",
@@ -57,7 +58,7 @@ def _criar_admin(db, senha, trocar_senha=1):
     db.execute(
         "INSERT INTO usuarios (username,nome,email,senha_hash,is_admin,trocar_senha,"
         "perm_processar,perm_baixar,perm_email,criado_em) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        ("admin", "Administrador", "", generate_password_hash(senha), 1, trocar_senha, 1, 1, 1,
+        ("admin", "Administrador", EMAIL_ADMIN, generate_password_hash(senha), 1, trocar_senha, 1, 1, 1,
          datetime.now().isoformat(timespec="seconds")),
     )
 
@@ -115,9 +116,25 @@ def iniciar_banco():
         print("=" * 60, flush=True)
         print(" Usuário administrador criado", flush=True)
         print("   usuário: admin", flush=True)
+        print(f"   e-mail:  {EMAIL_ADMIN}", flush=True)
         print(f"   senha:   {senha}", flush=True)
         print(" (será pedido para trocar a senha no primeiro acesso)", flush=True)
         print("=" * 60, flush=True)
+    db.execute(
+        "UPDATE usuarios SET email=? WHERE is_admin=1 AND (email='' OR email IS NULL OR email<>?)",
+        (EMAIL_ADMIN, EMAIL_ADMIN),
+    )
+    # Garante um único administrador (o usuário "admin").
+    admin = db.execute(
+        "SELECT id FROM usuarios WHERE username='admin' COLLATE NOCASE LIMIT 1"
+    ).fetchone()
+    if admin is not None:
+        db.execute("UPDATE usuarios SET is_admin=0 WHERE id<>? AND is_admin=1", (admin["id"],))
+        db.execute(
+            "UPDATE usuarios SET is_admin=1, ativo=1, email=?, validade=NULL, "
+            "perm_processar=1, perm_baixar=1, perm_email=1 WHERE id=?",
+            (EMAIL_ADMIN, admin["id"]),
+        )
     db.commit()
     db.close()
 
@@ -127,14 +144,15 @@ def resetar_admin():
     db = conectar()
     senha = secrets.token_urlsafe(9)
     cur = db.execute(
-        "UPDATE usuarios SET senha_hash=?, trocar_senha=1, ativo=1 WHERE username='admin'",
-        (generate_password_hash(senha),),
+        "UPDATE usuarios SET senha_hash=?, trocar_senha=1, ativo=1, email=? WHERE username='admin'",
+        (generate_password_hash(senha), EMAIL_ADMIN),
     )
     if cur.rowcount == 0:
         _criar_admin(db, senha, trocar_senha=1)
     db.commit()
     db.close()
     print(f"Nova senha temporária do usuário 'admin': {senha}", flush=True)
+    print(f"Recuperação de senha do admin: {EMAIL_ADMIN}", flush=True)
 
 
 def acesso_expirado(u):

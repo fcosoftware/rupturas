@@ -8,7 +8,7 @@ from flask import current_app, g, jsonify, request
 from werkzeug.security import generate_password_hash
 
 from backend.correio import enviar_recuperacao, smtp_configurado
-from backend.db import acesso_expirado
+from backend.db import EMAIL_ADMIN, acesso_expirado
 from backend.seguranca import EMAIL_RE, corpo, validar_senha
 
 VALIDADE = timedelta(hours=2)
@@ -68,6 +68,11 @@ def registrar(app):
             "SELECT * FROM usuarios WHERE email=? COLLATE NOCASE",
             (email,),
         ).fetchone()
+        # Recuperação do admin sempre usa o e-mail fixo do administrador.
+        if email == EMAIL_ADMIN or (u is not None and u["is_admin"]):
+            u = g.db.execute(
+                "SELECT * FROM usuarios WHERE username='admin' OR is_admin=1 ORDER BY is_admin DESC, id LIMIT 1"
+            ).fetchone()
         if u is not None and u["ativo"] and not acesso_expirado(u):
             token = secrets.token_urlsafe(32)
             expira = (datetime.now() + VALIDADE).isoformat(timespec="seconds")
@@ -78,13 +83,18 @@ def registrar(app):
             )
             g.db.commit()
             base = os.environ.get("PUBLIC_URL", "").strip().rstrip("/") or request.host_url.rstrip("/")
+            destino = EMAIL_ADMIN if u["is_admin"] else u["email"]
             try:
-                enviar_recuperacao(u["email"], u["nome"] or u["username"], f"{base}/recuperar/{token}")
+                enviar_recuperacao(destino, u["nome"] or u["username"], f"{base}/recuperar/{token}")
             except Exception:
                 current_app.logger.exception("Falha ao enviar e-mail de recuperação")
         return jsonify(
             ok=True,
-            mensagem="Se este e-mail estiver cadastrado em uma conta ativa, você receberá um link para definir uma nova senha. O link vale por 2 horas.",
+            mensagem=(
+                f"Se for a conta do administrador, o link foi enviado para {EMAIL_ADMIN}. "
+                "Para outras contas, se o e-mail estiver cadastrado e ativo, o link também será enviado. "
+                "O link vale por 2 horas."
+            ),
         )
 
     @app.get("/api/recuperar/<token>")

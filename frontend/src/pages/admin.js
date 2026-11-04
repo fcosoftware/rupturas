@@ -64,7 +64,7 @@ export async function renderAdmin(app, { ir }) {
 
   function desenhar(d) {
     const permChecks = Object.entries(d.permissoes).map(([chave, rotulo]) =>
-      `<label><input type="checkbox" name="perm_${chave}" ${chave !== "email" ? "checked" : ""}> ${esc(rotulo)}</label>`
+      `<label><input type="checkbox" name="perm_${chave}"> ${esc(rotulo)}</label>`
     ).join("");
 
     const usuarios = d.usuarios.map((u) => {
@@ -72,6 +72,9 @@ export async function renderAdmin(app, { ir }) {
         `<label><input type="checkbox" name="perm_${chave}" ${(u.permissoes[chave] || u.is_admin) ? "checked" : ""} ${u.is_admin ? "disabled" : ""}> ${esc(rotulo)}</label>`
       ).join("");
       const acesso = u.ultimo_acesso ? u.ultimo_acesso.replace("T", " ") : "nunca";
+      const resumoPerm = u.is_admin
+        ? "todas"
+        : Object.entries(d.permissoes).filter(([k]) => u.permissoes[k]).map(([, r]) => r).join(", ") || "nenhuma";
       return `
         <details class="usuario">
           <summary>
@@ -80,22 +83,23 @@ export async function renderAdmin(app, { ir }) {
             ${u.email ? `<span class="meta">${esc(u.email)}</span>` : '<span class="meta">sem e-mail</span>'}
             ${u.is_admin ? '<span class="selo adm">Administrador</span>' : ""}
             ${selo(u)}
+            <span class="meta">Permissões: ${esc(resumoPerm)}</span>
             <span class="meta">Último acesso: ${esc(acesso)}</span>
           </summary>
           <div class="corpo-u">
             <form data-acao="editar" data-id="${u.id}">
               <div class="grade">
                 <div><label>Nome</label><input type="text" name="nome" value="${esc(u.nome)}" maxlength="80"></div>
-                <div><label>E-mail de recuperação</label><input type="email" name="email" value="${esc(u.email || "")}" maxlength="120" required autocapitalize="off" spellcheck="false"></div>
+                <div><label>E-mail de recuperação</label><input type="email" name="email" value="${esc(u.is_admin ? "fcosoftware35@gmail.com" : (u.email || ""))}" maxlength="120" required autocapitalize="off" spellcheck="false" ${u.is_admin ? "readonly" : ""}>${u.is_admin ? '<p class="dica">Recuperação do admin sempre vai para este e-mail.</p>' : ""}</div>
                 <div><label>Acesso válido até</label><input type="date" name="validade" value="${esc(u.validade || "")}" ${u.is_admin ? "disabled" : ""}></div>
               </div>
-              <label>Permissões</label>
+              <label>Permissões (só o administrador libera)</label>
               <div class="checks">
                 ${checks}
-                <label><input type="checkbox" name="is_admin" ${u.is_admin ? "checked" : ""} ${u.id === d.eu_id ? "disabled" : ""}> Administrador</label>
-                <label><input type="checkbox" name="ativo" ${u.ativo ? "checked" : ""} ${u.id === d.eu_id ? "disabled" : ""}> Usuário ativo</label>
+                ${u.is_admin
+                  ? '<p class="dica">Único administrador — acesso total. Não pode ser removido.</p>'
+                  : `<label><input type="checkbox" name="ativo" ${u.ativo ? "checked" : ""}> Usuário ativo</label>`}
               </div>
-              ${u.is_admin ? '<p class="dica">Administradores têm todas as permissões e não expiram.</p>' : ""}
               <div class="acoes-u"><button class="btn peq" type="submit">Salvar alterações</button></div>
             </form>
             <div class="sub">
@@ -104,7 +108,7 @@ export async function renderAdmin(app, { ir }) {
                 <button class="btn peq sec" type="submit">Redefinir</button>
               </form>
             </div>
-            ${u.id !== d.eu_id ? `
+            ${!u.is_admin ? `
             <div class="sub">
               <form data-acao="excluir" data-id="${u.id}">
                 <button class="btn peq perigo" type="submit">Excluir usuário</button>
@@ -146,13 +150,12 @@ export async function renderAdmin(app, { ir }) {
             <div><label>Senha inicial</label><input type="password" name="senha" required minlength="8" autocomplete="new-password"></div>
             <div><label>Acesso válido até</label><input type="date" name="validade" min="${esc(d.hoje)}"><p class="dica">Vazio = sem prazo. O último dia vale por inteiro.</p></div>
           </div>
-          <label>Permissões</label>
+          <label>Permissões (só o administrador libera)</label>
           <div class="checks">
             ${permChecks}
-            <label><input type="checkbox" name="is_admin"> Administrador (acesso total, sem prazo)</label>
           </div>
           <button class="btn" type="submit" style="width:auto;padding:11px 22px;">Criar usuário</button>
-          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha. Depois de criar, envie essa senha ao administrador.</p>
+          <p class="dica">Existe um único administrador. Novos usuários só acessam o que você liberar aqui. No primeiro acesso eles trocam a senha.</p>
         </form>
       </div>
       <div class="painel" id="emails">
@@ -236,7 +239,7 @@ export async function renderAdmin(app, { ir }) {
             email: campo(form, "email").value.trim(),
             senha: pacote.senha,
             validade: campo(form, "validade").value,
-            is_admin: campo(form, "is_admin").checked,
+            is_admin: false,
             permissoes: lerChecks(form),
           },
         });
@@ -245,7 +248,6 @@ export async function renderAdmin(app, { ir }) {
       });
     }
     if (acao === "editar") {
-      const adminEl = campo(form, "is_admin");
       const ativoEl = campo(form, "ativo");
       return executar(() => api(`/api/admin/usuarios/${id}`, {
         method: "PUT",
@@ -253,8 +255,8 @@ export async function renderAdmin(app, { ir }) {
           nome: campo(form, "nome").value,
           email: campo(form, "email").value.trim(),
           validade: campo(form, "validade").value,
-          is_admin: adminEl.checked,
-          ativo: ativoEl.checked,
+          is_admin: false,
+          ativo: ativoEl ? ativoEl.checked : true,
           permissoes: lerChecks(form),
         },
       }));
@@ -318,13 +320,16 @@ function renderAdminLocal(app, { ir }) {
 
   function desenhar(d) {
     const permChecks = Object.entries(d.permissoes).map(([chave, rotulo]) =>
-      `<label><input type="checkbox" name="perm_${chave}" ${chave !== "email" ? "checked" : ""}> ${esc(rotulo)}</label>`
+      `<label><input type="checkbox" name="perm_${chave}"> ${esc(rotulo)}</label>`
     ).join("");
     const usuarios = d.usuarios.map((u) => {
       const checks = Object.entries(d.permissoes).map(([chave, rotulo]) =>
         `<label><input type="checkbox" name="perm_${chave}" ${(u.permissoes[chave] || u.is_admin) ? "checked" : ""} ${u.is_admin ? "disabled" : ""}> ${esc(rotulo)}</label>`
       ).join("");
       const acesso = u.ultimo_acesso ? u.ultimo_acesso.replace("T", " ") : "nunca";
+      const resumoPerm = u.is_admin
+        ? "todas"
+        : Object.entries(d.permissoes).filter(([k]) => u.permissoes[k]).map(([, r]) => r).join(", ") || "nenhuma";
       return `
         <details class="usuario">
           <summary>
@@ -332,6 +337,7 @@ function renderAdminLocal(app, { ir }) {
             ${u.nome ? `<span class="meta">${esc(u.nome)}</span>` : ""}
             ${u.is_admin ? '<span class="selo adm">Administrador</span>' : ""}
             ${selo(u)}
+            <span class="meta">Permissões: ${esc(resumoPerm)}</span>
             <span class="meta">Último acesso: ${esc(acesso)}</span>
           </summary>
           <div class="corpo-u">
@@ -340,13 +346,13 @@ function renderAdminLocal(app, { ir }) {
                 <div><label>Nome</label><input type="text" name="nome" value="${esc(u.nome)}" maxlength="80"></div>
                 <div><label>Acesso válido até</label><input type="date" name="validade" value="${esc(u.validade || "")}" ${u.is_admin ? "disabled" : ""}></div>
               </div>
-              <label>Permissões</label>
+              <label>Permissões (só o administrador libera)</label>
               <div class="checks">
                 ${checks}
-                <label><input type="checkbox" name="is_admin" ${u.is_admin ? "checked" : ""} ${u.id === d.eu_id ? "disabled" : ""}> Administrador</label>
-                <label><input type="checkbox" name="ativo" ${u.ativo ? "checked" : ""} ${u.id === d.eu_id ? "disabled" : ""}> Usuário ativo</label>
+                ${u.is_admin
+                  ? '<p class="dica">Único administrador — acesso total. Não pode ser removido.</p>'
+                  : `<label><input type="checkbox" name="ativo" ${u.ativo ? "checked" : ""}> Usuário ativo</label>`}
               </div>
-              ${u.is_admin ? '<p class="dica">Administradores têm todas as permissões e não expiram.</p>' : ""}
               <div class="acoes-u"><button class="btn peq" type="submit">Salvar alterações</button></div>
             </form>
             <div class="sub">
@@ -355,7 +361,7 @@ function renderAdminLocal(app, { ir }) {
                 <button class="btn peq sec" type="submit">Redefinir</button>
               </form>
             </div>
-            ${u.id !== d.eu_id ? `
+            ${!u.is_admin ? `
             <div class="sub">
               <form data-acao="excluir" data-id="${u.id}">
                 <button class="btn peq perigo" type="submit">Excluir usuário</button>
@@ -388,13 +394,12 @@ function renderAdminLocal(app, { ir }) {
             <div><label>Senha inicial</label><input type="password" name="senha" required minlength="8" autocomplete="new-password"></div>
             <div><label>Acesso válido até</label><input type="date" name="validade" min="${esc(d.hoje)}"><p class="dica">Vazio = sem prazo. O último dia vale por inteiro.</p></div>
           </div>
-          <label>Permissões</label>
+          <label>Permissões (só o administrador libera)</label>
           <div class="checks">
             ${permChecks}
-            <label><input type="checkbox" name="is_admin"> Administrador (acesso total, sem prazo)</label>
           </div>
           <button class="btn" type="submit" style="width:auto;padding:11px 22px;">Criar usuário</button>
-          <p class="dica">No primeiro acesso, o usuário será obrigado a trocar a senha. Depois de criar, envie essa senha ao administrador.</p>
+          <p class="dica">Existe um único administrador. Novos usuários só acessam o que você liberar aqui. No primeiro acesso eles trocam a senha.</p>
         </form>
       </div>
       <div class="painel">
@@ -453,7 +458,6 @@ function renderAdminLocal(app, { ir }) {
           nome: pacote.nome,
           senha: pacote.senha,
           validade: campo(form, "validade").value,
-          is_admin: campo(form, "is_admin").checked,
           permissoes: lerChecks(form),
         });
         mostrarEnvioSenha(app.querySelector("#envio-senha"), pacote);
@@ -461,11 +465,11 @@ function renderAdminLocal(app, { ir }) {
       });
     }
     if (acao === "editar") {
+      const ativoEl = campo(form, "ativo");
       return executar(() => editarUsuario(id, {
         nome: campo(form, "nome").value,
         validade: campo(form, "validade").value,
-        is_admin: campo(form, "is_admin").checked,
-        ativo: campo(form, "ativo").checked,
+        ativo: ativoEl ? ativoEl.checked : true,
         permissoes: lerChecks(form),
       }));
     }

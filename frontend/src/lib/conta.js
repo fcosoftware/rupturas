@@ -1,5 +1,6 @@
 /** Contas do site no GitHub Pages. Compartilhadas entre computadores via contas.json. */
 import { ESTATICO } from "./estatico.js";
+import { EMAIL_ADMIN } from "./gmail.js";
 import { baixarContas, publicarContas, salvarTokenSync, tokenSync } from "./sync.js";
 
 const CONTAS = "ruptura.contas";
@@ -34,6 +35,8 @@ async function salvar(data, { publicar = true } = {}) {
   salvarLocal(data);
   if (!publicar || !ESTATICO) return { publicado: false };
   if (!tokenSync()) return { publicado: false };
+  const me = usuarioAtual();
+  if (!me?.is_admin) return { publicado: false };
   await publicarContas(data);
   return { publicado: true };
 }
@@ -141,17 +144,13 @@ function exigirAdmin() {
   return me;
 }
 
-function adminsAtivos(usuarios, excetoId) {
-  return usuarios.filter((u) => u.is_admin && u.ativo !== false && u.id !== excetoId).length;
-}
-
 async function criarAdmin(senha) {
   const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
   const usuario = {
     id: 1,
     username: "admin",
     nome: "Administrador",
-    email: "fcosoftware35@gmail.com",
+    email: EMAIL_ADMIN,
     salt,
     hash: await hashSenha(senha, salt),
     is_admin: true,
@@ -170,6 +169,14 @@ function aplicarSenhaInicial(data) {
   else localStorage.removeItem(INICIAL);
 }
 
+function adminConfirmadoNoRemoto(local, remoto) {
+  const id = Number(sessionStorage.getItem(SESSAO) || 0);
+  if (!id) return false;
+  const noRemoto = remoto.usuarios.find((u) => u.id === id && u.is_admin && u.ativo !== false);
+  const noLocal = local.usuarios.find((u) => u.id === id && u.is_admin && u.ativo !== false);
+  return !!(noRemoto && noLocal);
+}
+
 export async function preparar() {
   if (!ESTATICO) return;
   let remoto = null;
@@ -182,16 +189,17 @@ export async function preparar() {
   if (remoto?.usuarios?.length) {
     const tRemoto = Date.parse(remoto.atualizado_em || 0) || 0;
     const tLocal = Date.parse(local.atualizado_em || 0) || 0;
-    if (!local.usuarios.length || tRemoto >= tLocal) {
-      salvarLocal(remoto);
-      aplicarSenhaInicial(remoto);
+    // Contas publicadas mandam. Só o admin confirmado no remoto pode manter edições locais mais novas.
+    if (local.usuarios.length && tLocal > tRemoto && adminConfirmadoNoRemoto(local, remoto)) {
+      try {
+        await publicarContas(local);
+      } catch {
+        /* mantém a cópia local do admin até conseguir publicar */
+      }
       return;
     }
-    try {
-      await publicarContas(local);
-    } catch {
-      /* mantém a cópia local mais nova até conseguir publicar */
-    }
+    salvarLocal(remoto);
+    aplicarSenhaInicial(remoto);
     return;
   }
   if (!local.usuarios.length) {
@@ -234,7 +242,7 @@ export async function entrar(username, senha) {
   const alvo = data.usuarios.find((item) => item.id === u.id);
   alvo.ultimo_acesso = new Date().toISOString().slice(0, 19);
   try {
-    await salvar(data);
+    await salvar(data, { publicar: false });
   } catch {
     data.atualizado_em = new Date().toISOString();
     salvarLocal(data);
@@ -281,12 +289,63 @@ export async function trocarSenha({ atual, nova, confirma }) {
 }
 
 export async function recriarAdmin() {
+  try {
+    const remoto = await baixarContas();
+    if (remoto?.usuarios?.length) {
+      throw new Error(
+        "Já existem contas publicadas neste site. Use a recuperação de senha do admin — o e-mail vai para " + EMAIL_ADMIN + ".",
+      );
+    }
+  } catch (err) {
+    if (String(err.message || "").includes("Já existem contas")) throw err;
+  }
   sair();
   localStorage.removeItem(CONTAS);
   localStorage.removeItem(INICIAL);
   const senha = senhaTemporaria();
   const data = await criarAdmin(senha);
-  await salvar(data);
+  data.atualizado_em = new Date().toISOString();
+  salvarLocal(data);
+  try {
+    await publicarContas(data);
+  } catch {
+    /* sem token: fica neste navegador até publicar */
+  }
+  return senha;
+}
+
+/** Redefine a senha do admin e devolve a temporária para enviar a EMAIL_ADMIN. */
+export async function recuperarSenhaAdmin() {
+  await preparar();
+  const data = ler();
+  let admin = data.usuarios.find((u) => u.username === "admin" || u.is_admin);
+  const senha = senhaTemporaria();
+  if (!admin) {
+    const criado = await criarAdmin(senha);
+    criado.atualizado_em = new Date().toISOString();
+    salvarLocal(criado);
+    try {
+      await publicarContas(criado);
+    } catch {
+      /* sem token */
+    }
+    return senha;
+  }
+  admin.email = EMAIL_ADMIN;
+  admin.salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+  admin.hash = await hashSenha(senha, admin.salt);
+  admin.trocar_senha = true;
+  admin.ativo = true;
+  data.senha_inicial = senha;
+  data.atualizado_em = new Date().toISOString();
+  salvarLocal(data);
+  localStorage.setItem(INICIAL, senha);
+  try {
+    await publicarContas(data);
+  } catch {
+    /* sem token: a senha vale neste navegador; envie o e-mail mesmo assim */
+  }
+  sair();
   return senha;
 }
 
@@ -313,16 +372,27 @@ export async function forcarPublicacao() {
   return { ok: true, mensagem: "Contas publicadas. A senha passa a valer nos outros computadores em alguns minutos." };
 }
 
-export async function criarUsuario({ username, nome, senha, validade, is_admin, permissoes }) {
+function permissoesDoForm(admin, permissoes) {
+  if (admin) return { processar: true, baixar: true, email: true };
+  return {
+    processar: !!permissoes?.processar,
+    baixar: !!permissoes?.baixar,
+    email: !!permissoes?.email,
+  };
+}
+
+export async function criarUsuario({ username, nome, senha, validade, permissoes }) {
   exigirAdmin();
   const login = String(username || "").trim();
   const erro = validarUsername(login) || validarSenhaLocal(String(senha || "")) || validarData(validade || "");
   if (erro) throw new Error(erro);
+  if (login.toLowerCase() === "admin") {
+    throw new Error("O login 'admin' é reservado ao único administrador.");
+  }
   const data = ler();
   if (data.usuarios.some((u) => u.username.toLowerCase() === login.toLowerCase())) {
     throw new Error("Já existe um usuário com esse nome.");
   }
-  const admin = !!is_admin;
   const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
   const id = data.usuarios.reduce((max, u) => Math.max(max, u.id), 0) + 1;
   data.usuarios.push({
@@ -332,48 +402,44 @@ export async function criarUsuario({ username, nome, senha, validade, is_admin, 
     email: "",
     salt,
     hash: await hashSenha(senha, salt),
-    is_admin: admin,
+    is_admin: false,
     ativo: true,
     trocar_senha: true,
-    validade: admin ? "" : (validade || ""),
-    permissoes: admin
-      ? { processar: true, baixar: true, email: true }
-      : {
-        processar: !!permissoes?.processar,
-        baixar: !!permissoes?.baixar,
-        email: !!permissoes?.email,
-      },
+    validade: validade || "",
+    permissoes: permissoesDoForm(false, permissoes),
     ultimo_acesso: "",
   });
   await salvar(data);
-  return { ok: true, mensagem: `Usuário '${login}' criado. Ele deverá trocar a senha no primeiro acesso.` };
+  return {
+    ok: true,
+    mensagem: `Usuário '${login}' criado. Só o administrador libera as permissões. Ele deverá trocar a senha no primeiro acesso.`,
+  };
 }
 
-export async function editarUsuario(id, { nome, validade, is_admin, ativo, permissoes }) {
+export async function editarUsuario(id, { nome, validade, ativo, permissoes }) {
   const me = exigirAdmin();
   const data = ler();
   const u = data.usuarios.find((item) => item.id === Number(id));
   if (!u) throw new Error("Usuário não encontrado.");
   const erro = validarData(validade || "");
   if (erro) throw new Error(erro);
-  const seraAdmin = u.id === me.id ? true : !!is_admin;
-  const seraAtivo = u.id === me.id ? true : !!ativo;
-  if (u.is_admin && (!seraAdmin || !seraAtivo) && adminsAtivos(data.usuarios, u.id) === 0) {
-    throw new Error("É preciso manter pelo menos um administrador ativo.");
+  // Um único admin: não promove ninguém e não remove o cargo do admin atual.
+  if (u.is_admin || u.id === me.id) {
+    u.nome = String(nome || "").trim().slice(0, 80);
+    u.is_admin = true;
+    u.ativo = true;
+    u.email = EMAIL_ADMIN;
+    u.validade = "";
+    u.permissoes = { processar: true, baixar: true, email: true };
+  } else {
+    u.nome = String(nome || "").trim().slice(0, 80);
+    u.is_admin = false;
+    u.ativo = !!ativo;
+    u.validade = validade || "";
+    u.permissoes = permissoesDoForm(false, permissoes);
   }
-  u.nome = String(nome || "").trim().slice(0, 80);
-  u.is_admin = seraAdmin;
-  u.ativo = seraAtivo;
-  u.validade = seraAdmin ? "" : (validade || "");
-  u.permissoes = seraAdmin
-    ? { processar: true, baixar: true, email: true }
-    : {
-      processar: !!permissoes?.processar,
-      baixar: !!permissoes?.baixar,
-      email: !!permissoes?.email,
-    };
   await salvar(data);
-  return { ok: true, mensagem: `Usuário '${u.username}' atualizado.` };
+  return { ok: true, mensagem: `Usuário '${u.username}' atualizado. Só o administrador libera o acesso.` };
 }
 
 export async function redefinirSenhaUsuario(id, senha) {
@@ -395,10 +461,7 @@ export async function excluirUsuario(id) {
   const data = ler();
   const u = data.usuarios.find((item) => item.id === Number(id));
   if (!u) throw new Error("Usuário não encontrado.");
-  if (u.id === me.id) throw new Error("Você não pode excluir o próprio usuário.");
-  if (u.is_admin && adminsAtivos(data.usuarios, u.id) === 0) {
-    throw new Error("É preciso manter pelo menos um administrador ativo.");
-  }
+  if (u.id === me.id || u.is_admin) throw new Error("O único administrador não pode ser excluído.");
   data.usuarios = data.usuarios.filter((item) => item.id !== u.id);
   await salvar(data);
   return { ok: true, mensagem: `Usuário '${u.username}' excluído.` };

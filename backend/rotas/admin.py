@@ -6,12 +6,11 @@ from datetime import date, datetime
 from flask import abort, g, jsonify
 from werkzeug.security import generate_password_hash
 
-from backend.db import PERMISSOES, usuario_json
+from backend.db import EMAIL_ADMIN, PERMISSOES, usuario_json
 from backend.rotas.recuperar import listar_pendentes
 from backend.seguranca import (
     EMAIL_RE,
     admin_required,
-    admins_ativos,
     corpo,
     ler_usuario_form,
     validar_data,
@@ -62,42 +61,59 @@ def registrar(app):
         username = str(data.get("username", "")).strip()
         senha = str(data.get("senha", ""))
         dados = ler_usuario_form(data, incluir_ativo=False)
+        # Só existe um administrador; novos usuários nunca nascem admin.
+        dados["is_admin"] = 0
         validade, erro = validar_data(dados["validade"])
         erro = erro or validar_username(username) or validar_senha(senha) or validar_email(dados["email"])
         if erro:
             return jsonify(erro=erro), 400
-        if _email_em_uso(dados["email"]):
+        if username.lower() == "admin":
+            return jsonify(erro="O login 'admin' é reservado ao único administrador."), 400
+        if _email_em_uso(dados["email"]) or dados["email"] == EMAIL_ADMIN:
             return jsonify(erro="Já existe um usuário com esse e-mail."), 409
         try:
             g.db.execute(
                 "INSERT INTO usuarios (username,nome,email,senha_hash,is_admin,ativo,validade,"
                 "perm_processar,perm_baixar,perm_email,trocar_senha,criado_em) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,1,?)",
-                (username, dados["nome"], dados["email"], generate_password_hash(senha), dados["is_admin"], 1,
+                "VALUES (?,?,?,?,0,1,?,?,?,?,1,?)",
+                (username, dados["nome"], dados["email"], generate_password_hash(senha),
                  validade, dados["perm_processar"], dados["perm_baixar"], dados["perm_email"],
                  datetime.now().isoformat(timespec="seconds")),
             )
             g.db.commit()
         except sqlite3.IntegrityError:
             return jsonify(erro="Já existe um usuário com esse nome."), 409
-        return jsonify(ok=True, mensagem=f"Usuário '{username}' criado. Ele deverá trocar a senha no primeiro acesso.")
+        if not any(dados[f"perm_{k}"] for k in PERMISSOES):
+            msg = (
+                f"Usuário '{username}' criado sem permissões. "
+                "Só o administrador pode liberar processar, baixar ou e-mail. "
+                "Ele deverá trocar a senha no primeiro acesso."
+            )
+        else:
+            msg = f"Usuário '{username}' criado. Ele deverá trocar a senha no primeiro acesso."
+        return jsonify(ok=True, mensagem=msg)
 
     @app.put("/api/admin/usuarios/<int:uid>")
     @admin_required
     def api_admin_editar(uid):
         u = buscar_usuario(uid)
         dados = ler_usuario_form(corpo())
+        # Mantém um único admin: ninguém é promovido; o admin atual não perde o cargo.
+        if u["is_admin"]:
+            dados["is_admin"] = 1
+            dados["ativo"] = 1
+            dados["email"] = EMAIL_ADMIN
+            dados["validade"] = ""
+            for k in PERMISSOES:
+                dados[f"perm_{k}"] = 1
+        else:
+            dados["is_admin"] = 0
         validade, erro = validar_data(dados["validade"])
         erro = erro or validar_email(dados["email"])
         if erro:
             return jsonify(erro=erro), 400
         if _email_em_uso(dados["email"], exceto_id=u["id"]):
             return jsonify(erro="Já existe um usuário com esse e-mail."), 409
-        if u["id"] == g.user["id"]:
-            dados["is_admin"], dados["ativo"] = 1, 1
-        elif u["is_admin"] and (not dados["is_admin"] or not dados["ativo"]) \
-                and admins_ativos(g.db, excluindo=u["id"]) == 0:
-            return jsonify(erro="É preciso manter pelo menos um administrador ativo."), 400
         g.db.execute(
             "UPDATE usuarios SET nome=?,email=?,is_admin=?,ativo=?,validade=?,perm_processar=?,"
             "perm_baixar=?,perm_email=? WHERE id=?",
@@ -126,10 +142,8 @@ def registrar(app):
     @admin_required
     def api_admin_excluir(uid):
         u = buscar_usuario(uid)
-        if u["id"] == g.user["id"]:
-            return jsonify(erro="Você não pode excluir o próprio usuário."), 400
-        if u["is_admin"] and admins_ativos(g.db, excluindo=u["id"]) == 0:
-            return jsonify(erro="É preciso manter pelo menos um administrador ativo."), 400
+        if u["id"] == g.user["id"] or u["is_admin"]:
+            return jsonify(erro="O único administrador não pode ser excluído."), 400
         g.db.execute("DELETE FROM recuperacoes WHERE usuario_id=?", (uid,))
         g.db.execute("DELETE FROM usuarios WHERE id=?", (uid,))
         g.db.commit()
